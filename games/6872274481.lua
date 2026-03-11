@@ -1467,7 +1467,7 @@ run(function()
 	end)
 end)
 
-for _, v in {'AntiRagdoll', 'TriggerBot', 'SilentAim', 'AutoRejoin', 'Rejoin', 'Disabler', 'Timer', 'ServerHop', 'MouseTP', 'MurderMystery', 'ESP'} do
+for _, v in {'AntiRagdoll', 'TriggerBot', 'SilentAim', 'AutoRejoin', 'Rejoin', 'Disabler', 'Timer', 'ServerHop', 'MouseTP', 'MurderMystery'} do
 	vape:Remove(v)
 end
 
@@ -10307,50 +10307,52 @@ run(function()
     }
     
     local frameCounter = 0
-    local Loop = {
-        Normal = function()
-            frameCounter = frameCounter + 1
-            local currentTime = tick()
-            
-            for ent, nametag in Reference do
-                if DistanceCheck.Enabled then
-                    local distance = entitylib.isAlive and (entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude or math_huge
-                    if distance < DistanceLimit.ValueMin or distance > DistanceLimit.ValueMax then
-                        nametag.Visible = false
-                        continue
-                    end
-                end
-                
-                local headPos, headVis = gameCamera:WorldToViewportPoint(ent.RootPart.Position + vector3new(0, ent.HipHeight + 1, 0))
-                nametag.Visible = headVis
-                if not headVis then continue end
-                
-                nametag.Position = udim2fromOffset(headPos.X, headPos.Y)
-                
-                if Distance.Enabled then
-                    local mag = entitylib.isAlive and math_floor((entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude) or 0
-                    if Sizes[ent] ~= mag then
-                        nametag.Text = string_format(Strings[ent], mag)
-                        local size = getfontsize(removeTags(nametag.Text), nametag.TextSize, nametag.FontFace, vector2new(100000, 100000))
-                        nametag.Size = udim2fromOffset(size.X + 8, size.Y + 7)
-                        Sizes[ent] = mag
-                    end
-                end
-                
-                if ShowKits.Enabled and frameCounter % 30 == 0 then
-                    local kitIcon = nametag:FindFirstChild('KitIcon')
-                    if kitIcon and ent.Player then
-                        local kit = ent.Player:GetAttribute('PlayingAsKits')
-                        local newKitImage = kit and (kitImageIds[kit:lower()] or kitImageIds["none"]) or kitImageIds["none"]
-                        
-                        if kitCache[ent] ~= newKitImage then
-                            kitIcon.Image = newKitImage
-                            kitCache[ent] = newKitImage
-                        end
-                    end
-                end
-            end
-        end,
+	Loop = {
+		Normal = function()
+			frameCounter = frameCounter + 1
+			local skipPosition = frameCounter % 2 == 0  
+			local currentTime = tick()
+
+			for ent, nametag in Reference do
+				if DistanceCheck.Enabled then
+					local distance = entitylib.isAlive and (entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude or math_huge
+					if distance < DistanceLimit.ValueMin or distance > DistanceLimit.ValueMax then
+						nametag.Visible = false
+						continue
+					end
+				end
+
+				local headPos, headVis = gameCamera:WorldToViewportPoint(ent.RootPart.Position + vector3new(0, ent.HipHeight + 1, 0))
+				nametag.Visible = headVis
+				if not headVis then continue end
+
+				if skipPosition then
+					nametag.Position = udim2fromOffset(headPos.X, headPos.Y)
+				end
+
+				if Distance.Enabled then
+					local mag = entitylib.isAlive and math_floor((entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude) or 0
+					if Sizes[ent] ~= mag then
+						nametag.Text = string_format(Strings[ent], mag)
+						local size = getfontsize(removeTags(nametag.Text), nametag.TextSize, nametag.FontFace, vector2new(100000, 100000))
+						nametag.Size = udim2fromOffset(size.X + 8, size.Y + 7)
+						Sizes[ent] = mag
+					end
+				end
+
+				if ShowKits.Enabled and frameCounter % 30 == 0 then
+					local kitIcon = nametag:FindFirstChild('KitIcon')
+					if kitIcon and ent.Player then
+						local kit = ent.Player:GetAttribute('PlayingAsKits')
+						local newKitImage = kit and (kitImageIds[kit:lower()] or kitImageIds["none"]) or kitImageIds["none"]
+						if kitCache[ent] ~= newKitImage then
+							kitIcon.Image = newKitImage
+							kitCache[ent] = newKitImage
+						end
+					end
+				end
+			end
+		end,
         Drawing = function()
             frameCounter = frameCounter + 1
             
@@ -16099,6 +16101,21 @@ run(function()
     local Folder = Instance.new('Folder')
     Folder.Parent = vape.gui
     
+	local teamColors = {
+		[1] = {name = "Blue",   color = Color3.fromRGB(85, 150, 255)},
+		[2] = {name = "Orange", color = Color3.fromRGB(255, 150, 50)},
+		[3] = {name = "Pink",   color = Color3.fromRGB(255, 100, 200)},
+		[4] = {name = "Yellow", color = Color3.fromRGB(255, 255, 50)}
+	}
+    
+    local function getBedTeamColor(bed)
+        local teamId = bed:GetAttribute('TeamID')
+        if teamId and teamColors[teamId] then
+            return teamColors[teamId]
+        end
+        return Color3.new(1, 1, 1)
+    end
+    
     local function scanSide(self, start, tab)
         for _, side in ipairs(sides) do
             for i = 1, 15 do
@@ -16244,10 +16261,10 @@ run(function()
         Name = 'Background',
         Function = function(callback)
             if Color.Object then 
-                Color.Object.Visible = callback
+                Color.Object.Visible = callback and not TeamColor.Enabled
             end
             for _, v in pairs(Reference) do
-                v.Frame.BackgroundTransparency = 1 - (callback and Color.Opacity or 0)
+                v.Frame.BackgroundTransparency = 1 - (callback and (TeamColor.Enabled and 0.5 or Color.Opacity) or 0)
                 local blur = v:FindFirstChild('Blur')
                 if blur then
                     blur.Visible = callback
@@ -16257,14 +16274,31 @@ run(function()
         Default = true
     })
     
+    TeamColor = BedPlates:CreateToggle({
+        Name = 'Team Color',
+        Tooltip = 'Use bed team color instead of custom color',
+        Default = true,
+        Function = function(callback)
+            if Color.Object then
+                Color.Object.Visible = Background.Enabled and not callback
+            end
+            for bed, billboard in pairs(Reference) do
+                billboard.Frame.BackgroundColor3 = callback and getBedTeamColor(bed) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+                billboard.Frame.BackgroundTransparency = 1 - (Background.Enabled and (callback and 0.5 or Color.Opacity) or 0)
+            end
+        end
+    })
+    
     Color = BedPlates:CreateColorSlider({
         Name = 'Background Color',
         DefaultValue = 0,
         DefaultOpacity = 0.5,
         Function = function(hue, sat, val, opacity)
             for bed, v in pairs(Reference) do
-                v.Frame.BackgroundColor3 = Color3.fromHSV(hue, sat, val)
-                if Background.Enabled then
+                if not TeamColor.Enabled then
+                    v.Frame.BackgroundColor3 = Color3.fromHSV(hue, sat, val)
+                end
+                if Background.Enabled and not TeamColor.Enabled then
                     v.Frame.BackgroundTransparency = 1 - opacity
                 end
             end
@@ -16272,12 +16306,94 @@ run(function()
         Visible = false,
         Darker = true
     })
+end)
 
-    task.defer(function()
-        if Color and Color.Object then
-            Color.Object.Visible = Background.Enabled
-        end
-    end)
+run(function()
+	local FrameBuffer
+	local Latency
+	local Rate
+	
+	local defaultFFlags = {
+		DFIntDebugDefaultTargetWorldStepsPerFrame = nil,
+		DFIntMaxMissedWorldStepsRemembered = nil,
+		DFIntWorldStepsOffsetAdjustRate = nil,
+		DFIntDebugSendDistInSteps = nil,
+		DFIntWorldStepMax = nil,
+		DFIntWarpFactor = nil
+	}
+	
+	local function captureDefaults()
+		for name, _ in pairs(defaultFFlags) do
+			local suc, val = pcall(function()
+				return getfflag(name)
+			end)
+			if suc then
+				defaultFFlags[name] = val
+			end
+		end
+	end
+	captureDefaults()
+	
+	local function restoreFFlags()
+		for name, val in pairs(defaultFFlags) do
+			if val then
+				pcall(function()
+					setfflag(name, val)
+				end)
+			end
+		end
+	end
+	
+	local function applyFFlags(latencyMs, rate)
+		rate = math.max(rate, 1)
+		local latency = latencyMs
+		if latency <= 1 then
+			latency = 1.5
+		end
+		
+		local OG = -2147483648
+		local NEW = OG * (latency / 1000)
+		local NEW2 = NEW * -1
+		local str = tostring(NEW)
+		local str2 = tostring(NEW2)
+		
+		pcall(function() setfflag('DFIntDebugDefaultTargetWorldStepsPerFrame', str) end)
+		pcall(function() setfflag('DFIntMaxMissedWorldStepsRemembered', str) end)
+		pcall(function() setfflag('DFIntWorldStepsOffsetAdjustRate', str2) end)
+		pcall(function() setfflag('DFIntDebugSendDistInSteps', str) end)
+		pcall(function() setfflag('DFIntWorldStepMax', str) end)
+		pcall(function() setfflag('DFIntWarpFactor', str2) end)
+	end
+	
+	FrameBuffer = vape.Categories.Blatant:CreateModule({
+		Name = 'FrameBuffer',
+		Function = function(callback)
+			if callback then
+				repeat
+					applyFFlags(Latency.Value, Rate.Value)
+					task.wait(1 / math.max(Rate.Value, 1))
+				until not FrameBuffer.Enabled
+				
+				restoreFFlags()
+			end
+		end,
+	})
+	
+	Latency = FrameBuffer:CreateSlider({
+		Name = "Latency",
+		Min = 0,
+		Max = 1000,
+		Default = 250,
+		Suffix = 'ms'
+	})
+	
+	Rate = FrameBuffer:CreateSlider({
+		Name = "Rate",
+		Min = 1,
+		Max = 360,
+		Default = 60,
+		Suffix = 'hz'
+	})
 end)
 
 run(function()
@@ -19854,82 +19970,9 @@ run(function()
     local HideOwnNametag
     local DotSizeSlider
     local DotPositionSlider
-    
-    local function getClan(player)
-        if not player then return "" end
-        return player:GetAttribute("ClanTag") or player:GetAttribute("Clan") or ""
-    end
-    
-    local function removeOtherNameTags(char)
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-            hum.NameDisplayDistance = 0
-        end
 
-        local head = char:FindFirstChild("Head")
-        if not head then return end
+    local LocalPlayer = playersService.LocalPlayer
 
-        for _, child in head:GetChildren() do
-            if child:IsA("BillboardGui") and child.Name ~= "OGNametag" and child.Name ~= "Nametag" then
-                child:Destroy()
-            end
-        end
-    end
-    
-    local function getNameColor(player, entity)
-        if not player then return Color3.fromRGB(255, 255, 255) end
-        
-        local localPlayer = playersService.LocalPlayer
-        local localTeamId = localPlayer and localPlayer:GetAttribute("Team")
-        local playerTeamId = player:GetAttribute("Team") or (entity and entity:GetAttribute("Team"))
-        
-        if localTeamId and playerTeamId and localTeamId == playerTeamId then
-            return Color3.fromRGB(90, 255, 90) 
-        end
-        return Color3.fromRGB(255, 80, 80)
-    end
-    
-    local function getTeamColor(player, entity)
-        local teamId = player and player:GetAttribute("Team") or (entity and entity:GetAttribute("Team"))
-        
-        if teamId then
-            local success, KnitClient = pcall(function()
-                return require(replicatedStorage['rbxts_include']['node_modules']['@easy-games']['knit'].src).KnitClient
-            end)
-            
-            if success and KnitClient and KnitClient.Controllers and KnitClient.Controllers.TeamController then
-                local team = KnitClient.Controllers.TeamController:getTeamById(teamId)
-                if team and team.color then
-                    local teamColor = team.color
-                    
-                    if teamColor == Color3.fromRGB(255, 102, 204) or 
-                       teamColor == Color3.fromRGB(255, 85, 255) or 
-                       teamColor == Color3.fromRGB(218, 133, 222) then
-                        return Color3.fromRGB(90, 255, 90)
-                    
-                    elseif teamColor == Color3.fromRGB(255, 106, 0) or 
-                           teamColor == Color3.fromRGB(255, 85, 0) then
-                        return Color3.fromRGB(255, 80, 80)
-                    
-                    elseif teamColor == Color3.fromRGB(0, 85, 255) or 
-                           teamColor == Color3.fromRGB(0, 102, 255) then
-                        return Color3.fromRGB(80, 160, 255)
-                    
-                    elseif teamColor == Color3.fromRGB(255, 255, 0) or 
-                           teamColor == Color3.fromRGB(255, 255, 85) then
-                        return Color3.fromRGB(255, 220, 80)
-                    
-                    else
-                        return teamColor
-                    end
-                end
-            end
-        end
-        
-        return Color3.fromRGB(255, 255, 255)
-    end
-    
     local function create(className, props)
         local obj = Instance.new(className)
         for k, v in pairs(props) do
@@ -19937,140 +19980,110 @@ run(function()
         end
         return obj
     end
-    
-    local function CreateLocalPlayerTag(player, character)
-        if not OGNametags or not OGNametags.Enabled then return end
-        if not character then return end
-        if HideOwnNametag and HideOwnNametag.Enabled then return end
-        
-        local head = character:FindFirstChild("Head")
-        if not head then return end
-        
-        removeOtherNameTags(character)
-        
-        local originalNametag = head:FindFirstChild("Nametag")
-        if originalNametag then
-            storedNametags[character] = originalNametag:Clone()
-            originalNametag:Destroy()
+
+    local function getHead(char)
+        return char:FindFirstChild("Head") or char:WaitForChild("Head", 5)
+    end
+
+    local function getClan(plr)
+        if not plr then return "" end
+        return plr:GetAttribute("ClanTag") or plr:GetAttribute("Clan") or ""
+    end
+
+    local function getNameColor(plr)
+        if not plr then return Color3.fromRGB(255, 80, 80) end
+        if LocalPlayer.Team and plr.Team and LocalPlayer.Team == plr.Team then
+            return Color3.fromRGB(90, 255, 90)
         end
-        
-        local oldOGNametag = head:FindFirstChild("OGNametag")
-        if oldOGNametag then oldOGNametag:Destroy() end
-        
-        local clan = getClan(player)
-        local nameColor = getNameColor(player, character)
-        local teamDotColor = getTeamColor(player, character)
-        
-        local dotPx = DotSizeSlider and DotSizeSlider.Value or 22
-        local dotPosition = DotPositionSlider and DotPositionSlider.Value or 0.10
-        
-        local billui = create("BillboardGui", {
-            Name = "OGNametag",
-            AlwaysOnTop = false,
-            Parent = head,
-            Size = UDim2.fromScale(5.35, 0.6),
-            StudsOffsetWorldSpace = Vector3.new(0, 1.6, 0),
-            Adornee = head
-        })
-        
-        local Main = create("Frame", {
-            Parent = billui,
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1)
-        })
-        
-        local Dot = create("Frame", {
-            Parent = Main,
-            BackgroundColor3 = teamDotColor,
-            BackgroundTransparency = 0.1,
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.new(0.02, 0, dotPosition + 0.4, 0),
-            Size = UDim2.fromOffset(dotPx, dotPx),
-            BorderSizePixel = 0
-        })
-        
-        create("UICorner", {Parent = Dot, CornerRadius = UDim.new(1, 0)})
-        
-        local Bar = create("Frame", {
-            Parent = Main,
-            BackgroundColor3 = Color3.new(0, 0, 0),
-            BackgroundTransparency = 0.65,
-            Position = UDim2.fromScale(0.19, 0.14), 
-            Size = UDim2.fromScale(0.82, 0.72),     
-            BorderSizePixel = 0
-        })
-        create("UICorner", {Parent = Bar, CornerRadius = UDim.new(0, 0)})
-        
-        local Stroke = create("UIStroke", {
-            Parent = Bar,
-            Color = nameColor,
-            Thickness = 1.2,
-            Transparency = 0.3
-        })
-        
-        local Txt = create("TextLabel", {
-            Parent = Bar,
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(0.99, 1.15),
-            Position = UDim2.fromScale(0.5, 0.5),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Font = Enum.Font.GothamMedium,
-            TextScaled = true,
-            RichText = true,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextYAlignment = Enum.TextYAlignment.Center
-        })
-        
-        local displayName = player.DisplayName ~= "" and player.DisplayName or player.Name
-        
+        return Color3.fromRGB(255, 80, 80)
+    end
+
+    local function getTeamDotColor(plr)
+        if not plr or not plr.Team then return Color3.new(1, 1, 1) end
+        local teamName = string.lower(plr.Team.Name)
+        if teamName:find("pink") then
+            return Color3.fromRGB(90, 255, 90)
+        elseif teamName:find("orange") then
+            return Color3.fromRGB(255, 80, 80)
+        elseif teamName:find("blue") then
+            return Color3.fromRGB(80, 160, 255)
+        elseif teamName:find("yellow") then
+            return Color3.fromRGB(255, 220, 80)
+        end
+        return Color3.new(1, 1, 1)
+    end
+
+    local function removeOtherNameTags(char)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+            hum.NameDisplayDistance = 0
+        end
+        local head = char:FindFirstChild("Head")
+        if not head then return end
+        for _, child in ipairs(head:GetChildren()) do
+            if child:IsA("BillboardGui") and child.Name ~= "OGNametag" and child.Name ~= "Nametag" then
+                child:Destroy()
+            end
+        end
+    end
+
+    local function updateTag(plr)
+        local data = ActiveTags[plr]
+        if not data then return end
+
+        local nameColor = getNameColor(plr)
+        local dotColor = getTeamDotColor(plr)
+        local clan = getClan(plr)
+
+        data.dot.BackgroundColor3 = dotColor
+        data.stroke.Color = nameColor
+
+        local displayName = plr.DisplayName ~= "" and plr.DisplayName or plr.Name
+
         if clan ~= "" then
-            Txt.Text = string.format(
+            data.txt.Text = string.format(
                 '<font color="%s" size="140">[%s]</font>&nbsp;<font color="rgb(%d,%d,%d)" size="130">%s</font>',
-                CLAN_GRAY,
-                clan,
-                nameColor.R * 255,
-                nameColor.G * 255,
-                nameColor.B * 255,
+                CLAN_GRAY, clan,
+                nameColor.R * 255, nameColor.G * 255, nameColor.B * 255,
                 displayName
             )
         else
-            Txt.Text = string.format(
+            data.txt.Text = string.format(
                 '<font color="rgb(%d,%d,%d)" size="130">%s</font>',
-                nameColor.R * 255,
-                nameColor.G * 255,
-                nameColor.B * 255,
+                nameColor.R * 255, nameColor.G * 255, nameColor.B * 255,
                 displayName
             )
         end
-        
-        ActiveTags[player] = {bill = billui, bar = Bar, dot = Dot, stroke = Stroke, txt = Txt}
     end
-    
-    local function CreateOtherPlayerTag(player, character)
+
+    local function CreatePlayerTag(plr, isLocal)
         if not OGNametags or not OGNametags.Enabled then return end
-        if not character then return end
-        
-        local head = character:FindFirstChild("Head")
+        if isLocal and HideOwnNametag and HideOwnNametag.Enabled then return end
+
+        local char = plr.Character
+        if not char then return end
+        local head = getHead(char)
         if not head then return end
-        
-        removeOtherNameTags(character)
-        
+
+        removeOtherNameTags(char)
+
         local originalNametag = head:FindFirstChild("Nametag")
         if originalNametag then
-            storedNametags[character] = originalNametag:Clone()
+            storedNametags[char] = originalNametag:Clone()
             originalNametag:Destroy()
         end
-        
-        local oldOGNametag = head:FindFirstChild("OGNametag")
-        if oldOGNametag then oldOGNametag:Destroy() end
-        
-        local nameColor = getNameColor(player, character)
-        local teamDotColor = getTeamColor(player, character)
-        local clan = getClan(player)
-        
+
+        local old = head:FindFirstChild("OGNametag")
+        if old then old:Destroy() end
+
+        local nameColor = getNameColor(plr)
+        local teamDotColor = getTeamDotColor(plr)
+        local clan = getClan(plr)
+
         local dotPx = DotSizeSlider and DotSizeSlider.Value or 22
-        local dotPosition = DotPositionSlider and DotPositionSlider.Value or 0.10
-        
+        local dotPos = DotPositionSlider and DotPositionSlider.Value or 0.10
+
         local billui = create("BillboardGui", {
             Name = "OGNametag",
             AlwaysOnTop = false,
@@ -20079,25 +20092,30 @@ run(function()
             StudsOffsetWorldSpace = Vector3.new(0, 1.6, 0),
             Adornee = head
         })
-        
+
         local Main = create("Frame", {
             Parent = billui,
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1)
         })
-        
+
         local Dot = create("Frame", {
             Parent = Main,
             BackgroundColor3 = teamDotColor,
             BackgroundTransparency = 0.1,
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.new(0.02, 0, dotPosition + 0.4, 0),
-            Size = UDim2.fromOffset(dotPx, dotPx),
+            Position = UDim2.fromScale(0.02, 0.10),
+            Size = UDim2.fromScale(0.17, 0.88),
             BorderSizePixel = 0
         })
-        
-        create("UICorner", {Parent = Dot, CornerRadius = UDim.new(1, 0)})
-        
+
+        create("UIAspectRatioConstraint", {
+            Parent = Dot,
+            AspectRatio = 1,
+            DominantAxis = Enum.DominantAxis.Height
+        })
+
+        create("UICorner", { Parent = Dot, CornerRadius = UDim.new(1, 0) })
+
         local Bar = create("Frame", {
             Parent = Main,
             BackgroundColor3 = Color3.new(0, 0, 0),
@@ -20106,15 +20124,16 @@ run(function()
             Size = UDim2.fromScale(0.82, 0.72),
             BorderSizePixel = 0
         })
-        create("UICorner", {Parent = Bar, CornerRadius = UDim.new(0, 0)})
-        
+
+        create("UICorner", { Parent = Bar, CornerRadius = UDim.new(0, 0) })
+
         local Stroke = create("UIStroke", {
             Parent = Bar,
             Color = nameColor,
             Thickness = 1.2,
             Transparency = 0.3
         })
-        
+
         local Txt = create("TextLabel", {
             Parent = Bar,
             BackgroundTransparency = 1,
@@ -20127,158 +20146,129 @@ run(function()
             TextXAlignment = Enum.TextXAlignment.Center,
             TextYAlignment = Enum.TextYAlignment.Center
         })
-        
-        local displayName = player and (player.DisplayName ~= "" and player.DisplayName or player.Name) or character.Name
-        
+
+        local displayName = plr.DisplayName ~= "" and plr.DisplayName or plr.Name
+
         if clan ~= "" then
             Txt.Text = string.format(
                 '<font color="%s" size="140">[%s]</font>&nbsp;<font color="rgb(%d,%d,%d)" size="130">%s</font>',
-                CLAN_GRAY,
-                clan,
-                nameColor.R * 255,
-                nameColor.G * 255,
-                nameColor.B * 255,
+                CLAN_GRAY, clan,
+                nameColor.R * 255, nameColor.G * 255, nameColor.B * 255,
                 displayName
             )
         else
             Txt.Text = string.format(
                 '<font color="rgb(%d,%d,%d)" size="130">%s</font>',
-                nameColor.R * 255,
-                nameColor.G * 255,
-                nameColor.B * 255,
+                nameColor.R * 255, nameColor.G * 255, nameColor.B * 255,
                 displayName
             )
         end
-        
-        ActiveTags[player or character] = {bill = billui, bar = Bar, dot = Dot, stroke = Stroke, txt = Txt}
+
+        ActiveTags[plr] = {
+            bar = Bar,
+            dot = Dot,
+            stroke = Stroke,
+            txt = Txt,
+            head = head,
+            char = char,
+            gui = billui
+        }
     end
-    
-    local function createOGNametag(character)
-        if not OGNametags or not OGNametags.Enabled then return end
-        if not character then return end
-        
-        task.wait(0.25)
-        
-        local player = playersService:GetPlayerFromCharacter(character)
-        local localPlayer = playersService.LocalPlayer
-        
-        if player == localPlayer then
-            CreateLocalPlayerTag(player, character)
-        else
-            CreateOtherPlayerTag(player, character)
+
+    local function hook(plr)
+        local function onCharAdded()
+            task.wait(0.25)
+            CreatePlayerTag(plr, plr == LocalPlayer)
+        end
+
+        local conn = plr.CharacterAdded:Connect(onCharAdded)
+        table.insert(connections, conn)
+
+        if plr.Character then
+            task.wait(0.25)
+            CreatePlayerTag(plr, plr == LocalPlayer)
         end
     end
-    
+
+    local renderConn
+
     OGNametags = vape.Categories.Render:CreateModule({
         Name = "OG Nametags",
         Function = function(callback)
             if callback then
-                for _, player in playersService:GetPlayers() do
-                    if player.Character then
-                        createOGNametag(player.Character)
-                    end
-                    
-                    local charAddedConn = player.CharacterAdded:Connect(function(character)
-                        createOGNametag(character)
-                    end)
-                    table.insert(connections, charAddedConn)
+                for _, plr in ipairs(playersService:GetPlayers()) do
+                    hook(plr)
                 end
-                
-                for _, entity in collectionService:GetTagged("entity") do
-                    if entity:IsA("Model") then
-                        createOGNametag(entity)
-                    end
-                end
-                
-                local playerAddedConn = playersService.PlayerAdded:Connect(function(player)
-                    if player.Character then
-                        createOGNametag(player.Character)
-                    end
-                    
-                    local charAddedConn = player.CharacterAdded:Connect(function(character)
-                        createOGNametag(character)
-                    end)
-                    table.insert(connections, charAddedConn)
-                end)
+
+                local playerAddedConn = playersService.PlayerAdded:Connect(hook)
                 table.insert(connections, playerAddedConn)
-                
-                local entityAddedConn = collectionService:GetInstanceAddedSignal("entity"):Connect(function(entity)
-                    if entity:IsA("Model") then
-                        createOGNametag(entity)
+
+                local playerRemovingConn = playersService.PlayerRemoving:Connect(function(plr)
+                    ActiveTags[plr] = nil
+                end)
+                table.insert(connections, playerRemovingConn)
+
+                renderConn = game:GetService("RunService").RenderStepped:Connect(function()
+                    local myChar = LocalPlayer.Character
+                    if not myChar then return end
+                    local myHead = myChar:FindFirstChild("Head")
+                    if not myHead then return end
+
+                    for plr, data in pairs(ActiveTags) do
+                        if data.head and data.gui then
+                            updateTag(plr)
+                            local dist = (data.head.Position - myHead.Position).Magnitude
+                            data.gui.AlwaysOnTop = dist <= 18
+                        end
                     end
                 end)
-                table.insert(connections, entityAddedConn)
-                
+
             else
-                for _, conn in connections do
-                    if conn then
-                        conn:Disconnect()
-                    end
+                if renderConn then
+                    renderConn:Disconnect()
+                    renderConn = nil
+                end
+
+                for _, conn in ipairs(connections) do
+                    if conn then conn:Disconnect() end
                 end
                 table.clear(connections)
                 table.clear(ActiveTags)
-                
-                for _, player in playersService:GetPlayers() do
-                    if player.Character then
-                        local head = player.Character:FindFirstChild("Head")
+
+                for _, plr in ipairs(playersService:GetPlayers()) do
+                    if plr.Character then
+                        local head = plr.Character:FindFirstChild("Head")
                         if head then
-                            local ogNametag = head:FindFirstChild("OGNametag")
-                            if ogNametag then
-                                ogNametag:Destroy()
-                            end
-                            
-                            if storedNametags[player.Character] then
-                                local restoredNametag = storedNametags[player.Character]:Clone()
-                                restoredNametag.Parent = head
-                                storedNametags[player.Character] = nil
+                            local og = head:FindFirstChild("OGNametag")
+                            if og then og:Destroy() end
+                            if storedNametags[plr.Character] then
+                                storedNametags[plr.Character]:Clone().Parent = head
+                                storedNametags[plr.Character] = nil
                             end
                         end
                     end
                 end
-                
-                for _, entity in collectionService:GetTagged("entity") do
-                    if entity:IsA("Model") then
-                        local head = entity:FindFirstChild("Head")
-                        if head then
-                            local ogNametag = head:FindFirstChild("OGNametag")
-                            if ogNametag then
-                                ogNametag:Destroy()
-                            end
-                            
-                            if storedNametags[entity] then
-                                local restoredNametag = storedNametags[entity]:Clone()
-                                restoredNametag.Parent = head
-                                storedNametags[entity] = nil
-                            end
-                        end
-                    end
-                end
-                
+
                 table.clear(storedNametags)
             end
         end,
         Tooltip = "OG BedWars nametags with Koli's UI"
     })
-    
+
     HideOwnNametag = OGNametags:CreateToggle({
         Name = "Hide Self Nametag",
         Tooltip = "Removes your own nametag for cleaner screen",
         Default = true,
         Function = function(callback)
             if OGNametags.Enabled then
-                local localPlayer = playersService.LocalPlayer
-                if localPlayer and localPlayer.Character then
-                    if callback then
-                        local head = localPlayer.Character:FindFirstChild("Head")
-                        if head then
-                            local ogTag = head:FindFirstChild("OGNametag")
-                            if ogTag then
-                                ogTag:Destroy()
-                            end
-                        end
-                    else
-                        CreateLocalPlayerTag(localPlayer, localPlayer.Character)
+                if callback then
+                    local head = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+                    if head then
+                        local og = head:FindFirstChild("OGNametag")
+                        if og then og:Destroy() end
                     end
+                else
+                    CreatePlayerTag(LocalPlayer, true)
                 end
             end
         end
@@ -20300,7 +20290,7 @@ run(function()
             end
         end
     })
-    
+
     DotPositionSlider = OGNametags:CreateSlider({
         Name = "Dot Position",
         Min = 0.01,
@@ -20311,12 +20301,11 @@ run(function()
         Function = function(val)
             for _, tagData in pairs(ActiveTags) do
                 if tagData and tagData.dot then
-                    tagData.dot.Position = UDim2.new(0.02, 0, val + 0.4, 0)
+                    tagData.dot.Position = UDim2.fromScale(0.02, val)
                 end
             end
         end
     })
-    
 end)
 
 run(function()
@@ -22469,24 +22458,25 @@ run(function()
 				local throwCooldown = 0.3
 				local pearlTriggered = false
 
+				local voidRayParams = RaycastParams.new()
+				voidRayParams.FilterType = Enum.RaycastFilterType.Blacklist
+				voidRayParams.FilterDescendantsInstances = {lplr.Character, gameCamera}
+
 				repeat
 					if entitylib.isAlive then
 						local root = entitylib.character.RootPart
 						local pearl = getItem('telepearl')
 						local currentTime = tick()
 
-						rayCheck.FilterDescendantsInstances = {lplr.Character, gameCamera, AntiFallPart}
-						rayCheck.CollisionGroup = root.CollisionGroup
-
 						local velY = root.AssemblyLinearVelocity.Y
-						local falling = velY < -55
-						local noGroundBelow = not workspace:Raycast(root.Position, Vector3.new(0, -120, 0), rayCheck)
+						local falling = velY < -60
+						local isJumping = velY > 5
+						local noGroundBelow = not workspace:Raycast(root.Position, Vector3.new(0, -120, 0), voidRayParams)
 
-						if pearl and falling and noGroundBelow then
+						if pearl and falling and noGroundBelow and not isJumping then
 							if not pearlTriggered and (currentTime - lastThrowTime) >= throwCooldown then
 								pearlTriggered = true
 								lastThrowTime = currentTime
-
 								local ground = findBestLandingSpot(root.Position)
 								if ground then
 									task.spawn(doPearl, root.Position, ground, pearl)
@@ -27467,761 +27457,6 @@ run(function()
 			DepositDelaySlider.Object.Visible = (AutoDeposit.Enabled and DepositDelay.Enabled)
 		end
 	end)
-end)
-
-run(function()
-	local ESP
-	local Targets
-	local Color
-	local Method
-	local BoundingBox
-	local Filled
-	local HealthBar
-	local Name
-	local DisplayName
-	local Background
-	local Teammates
-	local Distance
-	local DistanceLimit
-	local SmartLegit
-	local SmartLegitRange
-	local Reference = {}
-	local methodused
-	local smartLegitEnabled = false
-	local cachedNames = {}
-	local cachedColors = {}
-	local lastFrameCheck = 0
-	local FRAME_SKIP = 6
-	local frameCounter = 0
-	local tempVector2 = Vector2.new()
-	local vec2new = Vector2.new
-	local vec3new = Vector3.new
-	local cfnew = CFrame.new
-	local c3fromHSV = Color3.fromHSV
-	local mathclamp = math.clamp
-	local mathfloor = math.floor
-	
-	local function ESPWorldToViewport(pos)
-		local newpos = gameCamera:WorldToViewportPoint(gameCamera.CFrame:pointToWorldSpace(gameCamera.CFrame:PointToObjectSpace(pos)))
-		return vec2new(newpos.X, newpos.Y)
-	end
-	
-	local cachedRangeCheck = false
-	local lastRangeCheckTime = 0
-	local RANGE_CHECK_INTERVAL = 0.1 
-	
-	local function isAnyTargetInRange()
-		if not entitylib.isAlive then return false end
-		
-		local currentTime = tick()
-		if currentTime - lastRangeCheckTime < RANGE_CHECK_INTERVAL then
-			return cachedRangeCheck
-		end
-		
-		lastRangeCheckTime = currentTime
-		local myPos = entitylib.character.RootPart.Position
-		local range = SmartLegitRange.Value
-		local rangeSq = range * range 
-		
-		for ent, _ in Reference do
-			if not ent or not ent.RootPart then continue end
-			if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then continue end
-			if not Targets.Players.Enabled and ent.Player then continue end
-			if not Targets.NPCs.Enabled and ent.NPC then continue end
-			
-			local distSq = (myPos - ent.RootPart.Position).Magnitude
-			distSq = distSq * distSq 
-			if distSq <= rangeSq then
-				cachedRangeCheck = true
-				return true
-			end
-		end
-		
-		cachedRangeCheck = false
-		return false
-	end
-	
-	local function setAllVisibility(visible)
-		for ent, EntityESP in Reference do
-			for _, obj in EntityESP do
-				obj.Visible = visible
-			end
-		end
-	end
-	
-	local function getCachedName(ent)
-		local cacheKey = ent.Player or ent.Character
-		if cachedNames[cacheKey] then
-			return cachedNames[cacheKey]
-		end
-		
-		local name = ent.Player and whitelist:tag(ent.Player, true)..(DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
-		cachedNames[cacheKey] = name
-		return name
-	end
-	
-	local function getCachedColor(ent)
-		if cachedColors[ent] then
-			return cachedColors[ent]
-		end
-		local color = entitylib.getEntityColor(ent) or c3fromHSV(Color.Hue, Color.Sat, Color.Value)
-		cachedColors[ent] = color
-		return color
-	end
-	
-	local ESPAdded = {
-		Drawing2D = function(ent)
-			if not Targets.Players.Enabled and ent.Player then return end
-			if not Targets.NPCs.Enabled and ent.NPC then return end
-			if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
-			if vape.ThreadFix then
-				setthreadidentity(8)
-			end
-			local EntityESP = {}
-			EntityESP.Main = Drawing.new('Square')
-			EntityESP.Main.Transparency = BoundingBox.Enabled and 1 or 0
-			EntityESP.Main.ZIndex = 2
-			EntityESP.Main.Filled = false
-			EntityESP.Main.Thickness = 1
-			EntityESP.Main.Color = getCachedColor(ent)
-
-			if BoundingBox.Enabled then
-				EntityESP.Border = Drawing.new('Square')
-				EntityESP.Border.Transparency = 0.35
-				EntityESP.Border.ZIndex = 1
-				EntityESP.Border.Thickness = 1
-				EntityESP.Border.Filled = false
-				EntityESP.Border.Color = Color3.new()
-				EntityESP.Border2 = Drawing.new('Square')
-				EntityESP.Border2.Transparency = 0.35
-				EntityESP.Border2.ZIndex = 1
-				EntityESP.Border2.Thickness = 1
-				EntityESP.Border2.Filled = Filled.Enabled
-				EntityESP.Border2.Color = Color3.new()
-			end
-
-			if HealthBar.Enabled then
-				EntityESP.HealthLine = Drawing.new('Line')
-				EntityESP.HealthLine.Thickness = 1
-				EntityESP.HealthLine.ZIndex = 2
-				EntityESP.HealthLine.Color = c3fromHSV(mathclamp(ent.Health / ent.MaxHealth, 0, 1) / 2.5, 0.89, 0.75)
-				EntityESP.HealthBorder = Drawing.new('Line')
-				EntityESP.HealthBorder.Thickness = 3
-				EntityESP.HealthBorder.Transparency = 0.35
-				EntityESP.HealthBorder.ZIndex = 1
-				EntityESP.HealthBorder.Color = Color3.new()
-			end
-			
-			if Name.Enabled then
-				if Background.Enabled then
-					EntityESP.TextBKG = Drawing.new('Square')
-					EntityESP.TextBKG.Transparency = 0.35
-					EntityESP.TextBKG.ZIndex = 0
-					EntityESP.TextBKG.Thickness = 1
-					EntityESP.TextBKG.Filled = true
-					EntityESP.TextBKG.Color = Color3.new()
-				end
-				EntityESP.Drop = Drawing.new('Text')
-				EntityESP.Drop.Color = Color3.new()
-				EntityESP.Drop.Text = getCachedName(ent)
-				EntityESP.Drop.ZIndex = 1
-				EntityESP.Drop.Center = true
-				EntityESP.Drop.Size = 20
-				EntityESP.Text = Drawing.new('Text')
-				EntityESP.Text.Text = EntityESP.Drop.Text
-				EntityESP.Text.ZIndex = 2
-				EntityESP.Text.Color = EntityESP.Main.Color
-				EntityESP.Text.Center = true
-				EntityESP.Text.Size = 20
-			end
-			Reference[ent] = EntityESP
-		end,
-		Drawing3D = function(ent)
-			if not Targets.Players.Enabled and ent.Player then return end
-			if not Targets.NPCs.Enabled and ent.NPC then return end
-			if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
-			if vape.ThreadFix then
-				setthreadidentity(8)
-			end
-			local EntityESP = {}
-			EntityESP.Line1 = Drawing.new('Line')
-			EntityESP.Line2 = Drawing.new('Line')
-			EntityESP.Line3 = Drawing.new('Line')
-			EntityESP.Line4 = Drawing.new('Line')
-			EntityESP.Line5 = Drawing.new('Line')
-			EntityESP.Line6 = Drawing.new('Line')
-			EntityESP.Line7 = Drawing.new('Line')
-			EntityESP.Line8 = Drawing.new('Line')
-			EntityESP.Line9 = Drawing.new('Line')
-			EntityESP.Line10 = Drawing.new('Line')
-			EntityESP.Line11 = Drawing.new('Line')
-			EntityESP.Line12 = Drawing.new('Line')
-
-			local color = getCachedColor(ent)
-			for _, v in EntityESP do
-				v.Thickness = 1
-				v.Color = color
-			end
-
-			Reference[ent] = EntityESP
-		end,
-		DrawingSkeleton = function(ent)
-			if not Targets.Players.Enabled and ent.Player then return end
-			if not Targets.NPCs.Enabled and ent.NPC then return end
-			if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
-			if vape.ThreadFix then
-				setthreadidentity(8)
-			end
-			local EntityESP = {}
-			EntityESP.Head = Drawing.new('Line')
-			EntityESP.HeadFacing = Drawing.new('Line')
-			EntityESP.Torso = Drawing.new('Line')
-			EntityESP.UpperTorso = Drawing.new('Line')
-			EntityESP.LowerTorso = Drawing.new('Line')
-			EntityESP.LeftArm = Drawing.new('Line')
-			EntityESP.RightArm = Drawing.new('Line')
-			EntityESP.LeftLeg = Drawing.new('Line')
-			EntityESP.RightLeg = Drawing.new('Line')
-
-			local color = getCachedColor(ent)
-			for _, v in EntityESP do
-				v.Thickness = 2
-				v.Color = color
-			end
-
-			Reference[ent] = EntityESP
-		end
-	}
-	
-	local ESPRemoved = {
-		Drawing2D = function(ent)
-			local EntityESP = Reference[ent]
-			if EntityESP then
-				if vape.ThreadFix then
-					setthreadidentity(8)
-				end
-				Reference[ent] = nil
-				cachedNames[ent.Player or ent.Character] = nil
-				cachedColors[ent] = nil
-				for _, v in EntityESP do
-					pcall(function()
-						v.Visible = false
-						v:Remove()
-					end)
-				end
-			end
-		end
-	}
-	ESPRemoved.Drawing3D = ESPRemoved.Drawing2D
-	ESPRemoved.DrawingSkeleton = ESPRemoved.Drawing2D
-	
-	local ESPUpdated = {
-		Drawing2D = function(ent)
-			local EntityESP = Reference[ent]
-			if EntityESP then
-				if vape.ThreadFix then
-					setthreadidentity(8)
-				end
-				
-				if EntityESP.HealthLine then
-					EntityESP.HealthLine.Color = c3fromHSV(mathclamp(ent.Health / ent.MaxHealth, 0, 1) / 2.5, 0.89, 0.75)
-				end
-
-				if EntityESP.Text then
-					cachedNames[ent.Player or ent.Character] = nil
-					local newName = getCachedName(ent)
-					EntityESP.Text.Text = newName
-					EntityESP.Drop.Text = newName
-				end
-			end
-		end
-	}
-	
-	local ColorFunc = {
-		Drawing2D = function(hue, sat, val)
-			local color = c3fromHSV(hue, sat, val)
-			cachedColors = {}
-			for i, v in Reference do
-				local entityColor = getCachedColor(i)
-				v.Main.Color = entityColor
-				if v.Text then
-					v.Text.Color = entityColor
-				end
-			end
-		end,
-		Drawing3D = function(hue, sat, val)
-			local color = c3fromHSV(hue, sat, val)
-			cachedColors = {}
-			for i, v in Reference do
-				local playercolor = getCachedColor(i)
-				for _, v2 in v do
-					v2.Color = playercolor
-				end
-			end
-		end
-	}
-	ColorFunc.DrawingSkeleton = ColorFunc.Drawing3D
-	
-	local ESPLoop = {
-		Drawing2D = function()
-			frameCounter = frameCounter + 1
-			if frameCounter % FRAME_SKIP ~= 0 then
-				return
-			end
-			
-			local hideAll = smartLegitEnabled and isAnyTargetInRange()
-			local myRootPart = entitylib.isAlive and entitylib.character.RootPart
-			local myPos = myRootPart and myRootPart.Position
-			local distanceEnabled = Distance.Enabled
-			local distMin = distanceEnabled and DistanceLimit.ValueMin or 0
-			local distMax = distanceEnabled and DistanceLimit.ValueMax or math.huge
-			
-			for ent, EntityESP in Reference do
-				if hideAll then
-					for _, obj in EntityESP do
-						obj.Visible = false
-					end
-					continue
-				end
-				
-				if distanceEnabled and myPos then
-					local dist = (myPos - ent.RootPart.Position).Magnitude
-					if dist < distMin or dist > distMax then
-						for _, obj in EntityESP do
-							obj.Visible = false
-						end
-						continue
-					end
-				end
-
-				local rootPos, rootVis = gameCamera:WorldToViewportPoint(ent.RootPart.Position)
-				for _, obj in EntityESP do
-					obj.Visible = rootVis
-				end
-				if not rootVis then continue end
-
-				local camLookVector = gameCamera.CFrame.LookVector
-				local hipHeight = ent.HipHeight
-				local entRootPos = ent.RootPart.Position
-				
-				local topPos = gameCamera:WorldToViewportPoint((CFrame.lookAlong(entRootPos, camLookVector) * cfnew(2, hipHeight, 0)).p)
-				local bottomPos = gameCamera:WorldToViewportPoint((CFrame.lookAlong(entRootPos, camLookVector) * cfnew(-2, -hipHeight - 1, 0)).p)
-				
-				local sizex, sizey = topPos.X - bottomPos.X, topPos.Y - bottomPos.Y
-				local posx, posy = rootPos.X - sizex / 2, rootPos.Y - sizey / 2
-				
-				EntityESP.Main.Position = vec2new(mathfloor(posx), mathfloor(posy))
-				EntityESP.Main.Size = vec2new(mathfloor(sizex), mathfloor(sizey))
-				
-				if EntityESP.Border then
-					EntityESP.Border.Position = vec2new(mathfloor(posx - 1), mathfloor(posy + 1))
-					EntityESP.Border.Size = vec2new(mathfloor(sizex + 2), mathfloor(sizey - 2))
-					EntityESP.Border2.Position = vec2new(mathfloor(posx + 1), mathfloor(posy - 1))
-					EntityESP.Border2.Size = vec2new(mathfloor(sizex - 2), mathfloor(sizey + 2))
-				end
-
-				if EntityESP.HealthLine then
-					local healthRatio = mathclamp(ent.Health / ent.MaxHealth, 0, 1)
-					local healthposy = sizey * healthRatio
-					EntityESP.HealthLine.Visible = ent.Health > 0
-					EntityESP.HealthLine.From = vec2new(mathfloor(posx - 6), mathfloor(posy + (sizey - (sizey - healthposy))))
-					EntityESP.HealthLine.To = vec2new(mathfloor(posx - 6), mathfloor(posy))
-					EntityESP.HealthBorder.From = vec2new(mathfloor(posx - 6), mathfloor(posy + 1))
-					EntityESP.HealthBorder.To = vec2new(mathfloor(posx - 6), mathfloor(posy + sizey - 1))
-				end
-
-				if EntityESP.Text then
-					EntityESP.Text.Position = vec2new(mathfloor(posx + (sizex / 2)), mathfloor(posy + (sizey - 28)))
-					EntityESP.Drop.Position = EntityESP.Text.Position + vec2new(1, 1)
-					if EntityESP.TextBKG then
-						local textBounds = EntityESP.Text.TextBounds
-						EntityESP.TextBKG.Size = textBounds + vec2new(8, 4)
-						EntityESP.TextBKG.Position = EntityESP.Text.Position - vec2new(4 + (textBounds.X / 2), 0)
-					end
-				end
-			end
-		end,
-		Drawing3D = function()
-			frameCounter = frameCounter + 1
-			if frameCounter % FRAME_SKIP ~= 0 then
-				return
-			end
-			
-			local hideAll = smartLegitEnabled and isAnyTargetInRange()
-			local myRootPart = entitylib.isAlive and entitylib.character.RootPart
-			local myPos = myRootPart and myRootPart.Position
-			local distanceEnabled = Distance.Enabled
-			local distMin = distanceEnabled and DistanceLimit.ValueMin or 0
-			local distMax = distanceEnabled and DistanceLimit.ValueMax or math.huge
-			
-			for ent, EntityESP in Reference do
-				if hideAll then
-					for _, obj in EntityESP do
-						obj.Visible = false
-					end
-					continue
-				end
-				
-				if distanceEnabled and myPos then
-					local dist = (myPos - ent.RootPart.Position).Magnitude
-					if dist < distMin or dist > distMax then
-						for _, obj in EntityESP do
-							obj.Visible = false
-						end
-						continue
-					end
-				end
-
-				local _, rootVis = gameCamera:WorldToViewportPoint(ent.RootPart.Position)
-				for _, obj in EntityESP do
-					obj.Visible = rootVis
-				end
-				if not rootVis then continue end
-
-				local entRootPos = ent.RootPart.Position
-				local hipHeight = ent.HipHeight
-				
-				local v1_5 = vec3new(1.5, hipHeight, 1.5)
-				local v2_5 = vec3new(1.5, -hipHeight, 1.5)
-				local v3_5 = vec3new(-1.5, hipHeight, 1.5)
-				local v4_5 = vec3new(-1.5, -hipHeight, 1.5)
-				local v5_5 = vec3new(1.5, hipHeight, -1.5)
-				local v6_5 = vec3new(1.5, -hipHeight, -1.5)
-				local v7_5 = vec3new(-1.5, hipHeight, -1.5)
-				local v8_5 = vec3new(-1.5, -hipHeight, -1.5)
-				
-				local point1 = ESPWorldToViewport(entRootPos + v1_5)
-				local point2 = ESPWorldToViewport(entRootPos + v2_5)
-				local point3 = ESPWorldToViewport(entRootPos + v3_5)
-				local point4 = ESPWorldToViewport(entRootPos + v4_5)
-				local point5 = ESPWorldToViewport(entRootPos + v5_5)
-				local point6 = ESPWorldToViewport(entRootPos + v6_5)
-				local point7 = ESPWorldToViewport(entRootPos + v7_5)
-				local point8 = ESPWorldToViewport(entRootPos + v8_5)
-				
-				EntityESP.Line1.From = point1
-				EntityESP.Line1.To = point2
-				EntityESP.Line2.From = point3
-				EntityESP.Line2.To = point4
-				EntityESP.Line3.From = point5
-				EntityESP.Line3.To = point6
-				EntityESP.Line4.From = point7
-				EntityESP.Line4.To = point8
-				EntityESP.Line5.From = point1
-				EntityESP.Line5.To = point3
-				EntityESP.Line6.From = point1
-				EntityESP.Line6.To = point5
-				EntityESP.Line7.From = point5
-				EntityESP.Line7.To = point7
-				EntityESP.Line8.From = point7
-				EntityESP.Line8.To = point3
-				EntityESP.Line9.From = point2
-				EntityESP.Line9.To = point4
-				EntityESP.Line10.From = point2
-				EntityESP.Line10.To = point6
-				EntityESP.Line11.From = point6
-				EntityESP.Line11.To = point8
-				EntityESP.Line12.From = point8
-				EntityESP.Line12.To = point4
-			end
-		end,
-		DrawingSkeleton = function()
-			frameCounter = frameCounter + 1
-			if frameCounter % FRAME_SKIP ~= 0 then
-				return
-			end
-			
-			local hideAll = smartLegitEnabled and isAnyTargetInRange()
-			local myRootPart = entitylib.isAlive and entitylib.character.RootPart
-			local myPos = myRootPart and myRootPart.Position
-			local distanceEnabled = Distance.Enabled
-			local distMin = distanceEnabled and DistanceLimit.ValueMin or 0
-			local distMax = distanceEnabled and DistanceLimit.ValueMax or math.huge
-			
-			for ent, EntityESP in Reference do
-				if hideAll then
-					for _, obj in EntityESP do
-						obj.Visible = false
-					end
-					continue
-				end
-				
-				if distanceEnabled and myPos then
-					local dist = (myPos - ent.RootPart.Position).Magnitude
-					if dist < distMin or dist > distMax then
-						for _, obj in EntityESP do
-							obj.Visible = false
-						end
-						continue
-					end
-				end
-
-				local _, rootVis = gameCamera:WorldToViewportPoint(ent.RootPart.Position)
-				for _, obj in EntityESP do
-					obj.Visible = rootVis
-				end
-				if not rootVis then continue end
-				
-				local rigcheck = ent.Humanoid.RigType == Enum.HumanoidRigType.R6
-				pcall(function()
-					local offset = rigcheck and cfnew(0, -0.8, 0) or CFrame.identity
-					local torsoName = rigcheck and 'Torso' or 'UpperTorso'
-					local leftArmName = rigcheck and 'Left Arm' or 'LeftHand'
-					local rightArmName = rigcheck and 'Right Arm' or 'RightHand'
-					local leftLegName = rigcheck and 'Left Leg' or 'LeftFoot'
-					local rightLegName = rigcheck and 'Right Leg' or 'RightFoot'
-					
-					local head = ESPWorldToViewport((ent.Head.CFrame).p)
-					local headfront = ESPWorldToViewport((ent.Head.CFrame * cfnew(0, 0, -0.5)).p)
-					local torso = ent.Character[torsoName].CFrame
-					local toplefttorso = ESPWorldToViewport((torso * cfnew(-1.5, 0.8, 0)).p)
-					local toprighttorso = ESPWorldToViewport((torso * cfnew(1.5, 0.8, 0)).p)
-					local toptorso = ESPWorldToViewport((torso * cfnew(0, 0.8, 0)).p)
-					local bottomtorso = ESPWorldToViewport((torso * cfnew(0, -0.8, 0)).p)
-					local bottomlefttorso = ESPWorldToViewport((torso * cfnew(-0.5, -0.8, 0)).p)
-					local bottomrighttorso = ESPWorldToViewport((torso * cfnew(0.5, -0.8, 0)).p)
-					local leftarm = ESPWorldToViewport((ent.Character[leftArmName].CFrame * offset).p)
-					local rightarm = ESPWorldToViewport((ent.Character[rightArmName].CFrame * offset).p)
-					local leftleg = ESPWorldToViewport((ent.Character[leftLegName].CFrame * offset).p)
-					local rightleg = ESPWorldToViewport((ent.Character[rightLegName].CFrame * offset).p)
-					
-					EntityESP.Head.From = toptorso
-					EntityESP.Head.To = head
-					EntityESP.HeadFacing.From = head
-					EntityESP.HeadFacing.To = headfront
-					EntityESP.UpperTorso.From = toplefttorso
-					EntityESP.UpperTorso.To = toprighttorso
-					EntityESP.Torso.From = toptorso
-					EntityESP.Torso.To = bottomtorso
-					EntityESP.LowerTorso.From = bottomlefttorso
-					EntityESP.LowerTorso.To = bottomrighttorso
-					EntityESP.LeftArm.From = toplefttorso
-					EntityESP.LeftArm.To = leftarm
-					EntityESP.RightArm.From = toprighttorso
-					EntityESP.RightArm.To = rightarm
-					EntityESP.LeftLeg.From = bottomlefttorso
-					EntityESP.LeftLeg.To = leftleg
-					EntityESP.RightLeg.From = bottomrighttorso
-					EntityESP.RightLeg.To = rightleg
-				end)
-			end
-		end
-	}
-	
-	ESP = vape.Categories.Render:CreateModule({
-		Name = 'ESP',
-		Function = function(callback)
-			if callback then
-				frameCounter = 0
-				cachedNames = {}
-				cachedColors = {}
-				methodused = 'Drawing'..Method.Value
-				
-				if ESPRemoved[methodused] then
-					ESP:Clean(entitylib.Events.EntityRemoved:Connect(ESPRemoved[methodused]))
-				end
-				if ESPAdded[methodused] then
-					for _, v in entitylib.List do
-						if Reference[v] then
-							ESPRemoved[methodused](v)
-						end
-						ESPAdded[methodused](v)
-					end
-					ESP:Clean(entitylib.Events.EntityAdded:Connect(function(ent)
-						if Reference[ent] then
-							ESPRemoved[methodused](ent)
-						end
-						ESPAdded[methodused](ent)
-					end))
-				end
-				if ESPUpdated[methodused] then
-					ESP:Clean(entitylib.Events.EntityUpdated:Connect(ESPUpdated[methodused]))
-					for _, v in entitylib.List do
-						ESPUpdated[methodused](v)
-					end
-				end
-				if ColorFunc[methodused] then
-					ESP:Clean(vape.Categories.Friends.ColorUpdate.Event:Connect(function()
-						ColorFunc[methodused](Color.Hue, Color.Sat, Color.Value)
-					end))
-				end
-				if ESPLoop[methodused] then
-					ESP:Clean(runService.RenderStepped:Connect(ESPLoop[methodused]))
-				end
-			else
-				smartLegitEnabled = false
-				
-				if ESPRemoved[methodused] then
-					for i in Reference do
-						ESPRemoved[methodused](i)
-					end
-				end
-				
-				cachedNames = {}
-				cachedColors = {}
-			end
-		end,
-		Tooltip = 'Extra Sensory Perception\nRenders an ESP on players.'
-	})
-	
-	Targets = ESP:CreateTargets({
-		Players = true,
-		Function = function()
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end
-	})
-	
-	Method = ESP:CreateDropdown({
-		Name = 'Mode',
-		List = {'2D', '3D', 'Skeleton'},
-		Function = function(val)
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-			BoundingBox.Object.Visible = (val == '2D')
-			Filled.Object.Visible = (val == '2D')
-			HealthBar.Object.Visible = (val == '2D')
-			Name.Object.Visible = (val == '2D')
-			DisplayName.Object.Visible = Name.Object.Visible and Name.Enabled
-			Background.Object.Visible = Name.Object.Visible and Name.Enabled
-		end,
-	})
-	
-	Color = ESP:CreateColorSlider({
-		Name = 'Player Color',
-		Function = function(hue, sat, val)
-			if ESP.Enabled and ColorFunc[methodused] then
-				ColorFunc[methodused](hue, sat, val)
-			end
-		end
-	})
-	
-	BoundingBox = ESP:CreateToggle({
-		Name = 'Bounding Box',
-		Function = function()
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end,
-		Default = true,
-		Darker = true
-	})
-	
-	Filled = ESP:CreateToggle({
-		Name = 'Filled',
-		Function = function()
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end,
-		Darker = true
-	})
-	
-	HealthBar = ESP:CreateToggle({
-		Name = 'Health Bar',
-		Function = function()
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end,
-		Darker = true
-	})
-	
-	Name = ESP:CreateToggle({
-		Name = 'Name',
-		Function = function(callback)
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-			DisplayName.Object.Visible = callback
-			Background.Object.Visible = callback
-		end,
-		Darker = true
-	})
-	
-	DisplayName = ESP:CreateToggle({
-		Name = 'Use Displayname',
-		Function = function()
-			if ESP.Enabled then
-				cachedNames = {} 
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end,
-		Default = true,
-		Darker = true
-	})
-	
-	Background = ESP:CreateToggle({
-		Name = 'Show Background',
-		Function = function()
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end,
-		Darker = true
-	})
-	
-	Teammates = ESP:CreateToggle({
-		Name = 'Priority Only',
-		Function = function()
-			if ESP.Enabled then
-				ESP:Toggle()
-				ESP:Toggle()
-			end
-		end,
-		Default = true,
-		Tooltip = 'Hides teammates & non targetable entities'
-	})
-	
-	Distance = ESP:CreateToggle({
-		Name = 'Distance Check',
-		Function = function(callback)
-			DistanceLimit.Object.Visible = callback
-		end
-	})
-	
-	DistanceLimit = ESP:CreateTwoSlider({
-		Name = 'Player Distance',
-		Min = 0,
-		Max = 256,
-		DefaultMin = 0,
-		DefaultMax = 64,
-		Darker = true,
-		Visible = false
-	})
-	
-	SmartLegit = ESP:CreateToggle({
-		Name = 'Smart Legit ESP',
-		Default = false,
-		Tooltip = 'Hides all ESP when any target is within range',
-		Function = function(callback)
-			smartLegitEnabled = callback
-			SmartLegitRange.Object.Visible = callback
-			cachedRangeCheck = false
-			lastRangeCheckTime = 0
-		end
-	})
-	
-	SmartLegitRange = ESP:CreateSlider({
-		Name = 'Hide Range',
-		Min = 1,
-		Max = 200,
-		Default = 30,
-		Decimal = 1,
-		Suffix = ' studs',
-		Visible = false,
-		Tooltip = 'ESP hides when a target is within this range'
-	})
 end)
 
 run(function()
