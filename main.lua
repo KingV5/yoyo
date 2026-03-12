@@ -72,6 +72,7 @@ local function finishLoading()
         if (not teleportedServers) and (not shared.VapeIndependent) then
             teleportedServers = true
             vape:Uninject()  
+            vape:Save()
             local teleportScript = [[
                 shared.vapereload = true
                 if shared.VapeDeveloper then
@@ -86,8 +87,10 @@ local function finishLoading()
             if shared.VapeCustomProfile then
                 teleportScript = 'shared.VapeCustomProfile = "' .. shared.VapeCustomProfile .. '"\n' .. teleportScript
             end
-            vape:Save()
-            queue_on_teleport(teleportScript)
+            local success, err = pcall(queue_on_teleport, teleportScript)
+            if not success then
+                shared.vapereload = true
+            end
         end
     end))
 
