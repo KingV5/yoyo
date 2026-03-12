@@ -1,5 +1,4 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
---This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local function safeGetProto(func, index)
     if not func then return nil end
     local success, proto = pcall(debug.getconstant, func, index)
@@ -11287,7 +11286,7 @@ run(function()
 	end
 	
 	StorageESP = vape.Categories.Render:CreateModule({
-		Name = 'Storage ESP',
+		Name = 'StorageESP',
 		Function = function(callback)
 			if callback then
 				local tagged = collectionService:GetTagged('chest')
@@ -13881,128 +13880,139 @@ run(function()
 end)
 	
 run(function()
-    local ShopTierBypass
-    local tiered, nexttier = {}, {}
-    local originalGetShop
-    local shopItemsTracked = {}
-    
-    local function applyBypassToItem(item)
-        if item and type(item) == "table" then
-            if not tiered[item] then 
-                tiered[item] = item.tiered 
-            end
-            if not nexttier[item] then 
-                nexttier[item] = item.nextTier 
-            end
-            item.nextTier = nil
-            item.tiered = nil
-            shopItemsTracked[item] = true
-        end
-    end
-    
-    local function applyBypassToTable(tbl)
-        if tbl and type(tbl) == "table" then
-            for _, item in pairs(tbl) do
-                if type(item) == "table" then
-                    applyBypassToItem(item)
-                end
-            end
-        end
-    end
-    
-    local function getShopController()
-        local success, result = pcall(function()
-            local RuntimeLib = require(game:GetService("ReplicatedStorage"):WaitForChild("rbxts_include"):WaitForChild("RuntimeLib"))
-            if RuntimeLib then
-                return RuntimeLib.import(script, game:GetService("ReplicatedStorage"), "TS", "games", "bedwars", "shop", "bedwars-shop")
-            end
-        end)
-        
-        if success then
-            return result
-        end
-        
-        local shopModule = game:GetService("ReplicatedStorage"):FindFirstChild("TS"):FindFirstChild("games"):FindFirstChild("bedwars"):FindFirstChild("shop"):FindFirstChild("bedwars-shop")
-        if shopModule and shopModule:IsA("ModuleScript") then
-            return require(shopModule)
-        end
-        
-        return nil
-    end
-    
-    ShopTierBypass = vape.Categories.Utility:CreateModule({
-        Name = 'ShopTierBypass',
-        Function = function(callback)
-            if callback then
-                repeat task.wait() until store.shopLoaded or not ShopTierBypass.Enabled
-                if ShopTierBypass.Enabled then
-                    for _, v in pairs(bedwars.Shop.ShopItems) do
-                        tiered[v] = v.tiered
-                        nexttier[v] = v.nextTier
-                        v.nextTier = nil
-                        v.tiered = nil
-                        shopItemsTracked[v] = true
-                    end
-                    
-                    if bedwars.Shop.getShop and not originalGetShop then
-                        originalGetShop = bedwars.Shop.getShop
-                        bedwars.Shop.getShop = function(...)
-                            local result = originalGetShop(...)
-                            
-                            if type(result) == "table" then
-                                applyBypassToTable(result)
-                            end
-                            
-                            return result
-                        end
-                    end
-                    
-                    local shopController = getShopController()
-                    if shopController and shopController.BedwarsShop and shopController.BedwarsShop.getShop then
-                        if not tiered["shopControllerHooked"] then
-                            tiered["shopControllerHooked"] = true
-                            local originalControllerGetShop = shopController.BedwarsShop.getShop
-                            shopController.BedwarsShop.getShop = function(...)
-                                local result = originalControllerGetShop(...)
-                                if type(result) == "table" then
-                                    applyBypassToTable(result)
-                                end
-                                return result
-                            end
-                        end
-                    end
-                end
-            else
-                for item, _ in pairs(shopItemsTracked) do
-                    if item and type(item) == "table" then
-                        if tiered[item] ~= nil then
-                            item.tiered = tiered[item]
-                        end
-                        if nexttier[item] ~= nil then
-                            item.nextTier = nexttier[item]
-                        end
-                    end
-                end
-                
-                if tiered["shopControllerHooked"] then
-                    local shopController = getShopController()
-                    if shopController and shopController.BedwarsShop and shopController.BedwarsShop.getShop then
-                    end
-                    tiered["shopControllerHooked"] = nil
-                end
-                
-                if originalGetShop then
-                    bedwars.Shop.getShop = originalGetShop
-                    originalGetShop = nil
-                end
-                
-                table.clear(tiered)
-                table.clear(nexttier)
-                table.clear(shopItemsTracked)
-            end
-        end,
-        Tooltip = 'Lets you buy things like armor and tools early.'
-    })
+	local ShopTierBypass
+	local tiered, nexttier = {}, {}
+	local originalGetShop
+	local shopItemsTracked = {}
+	
+	local function applyBypassToItem(item)
+		if item and type(item) == "table" then
+			if not tiered[item] then 
+				tiered[item] = item.tiered 
+			end
+			if not nexttier[item] then 
+				nexttier[item] = item.nextTier 
+			end
+			item.nextTier = nil
+			item.tiered = nil
+			shopItemsTracked[item] = true
+		end
+	end
+	
+	local function applyBypassToTable(tbl)
+		if tbl and type(tbl) == "table" then
+			for _, item in pairs(tbl) do
+				if type(item) == "table" then
+					applyBypassToItem(item)
+				end
+			end
+		end
+	end
+	
+	local function getShopController()
+		local success, result = pcall(function()
+			local RuntimeLib = require(game:GetService("ReplicatedStorage"):WaitForChild("rbxts_include"):WaitForChild("RuntimeLib"))
+			if RuntimeLib then
+				return RuntimeLib.import(script, game:GetService("ReplicatedStorage"), "TS", "games", "bedwars", "shop", "bedwars-shop")
+			end
+		end)
+		
+		if success then
+			return result
+		end
+		
+		local shopModule = game:GetService("ReplicatedStorage"):FindFirstChild("TS"):FindFirstChild("games"):FindFirstChild("bedwars"):FindFirstChild("shop"):FindFirstChild("bedwars-shop")
+		if shopModule and shopModule:IsA("ModuleScript") then
+			return require(shopModule)
+		end
+		
+		return nil
+	end
+	
+	ShopTierBypass = vape.Categories.Utility:CreateModule({
+		Name = 'ShopTierBypass',
+		Function = function(callback)
+			if callback then
+				local function collectAndBypass()
+					local itemsSeen = {}
+					if bedwars.Shop and bedwars.Shop.ShopItems then
+						for _, v in pairs(bedwars.Shop.ShopItems) do
+							itemsSeen[v] = true
+						end
+					end
+					if bedwars.ShopItems then
+						for _, v in pairs(bedwars.ShopItems) do
+							itemsSeen[v] = true
+						end
+					end
+					
+					local shopController = getShopController()
+					if shopController and shopController.BedwarsShop and shopController.BedwarsShop.getShop then
+						local shopTable = shopController.BedwarsShop.getShop()
+						if type(shopTable) == "table" then
+							for _, v in pairs(shopTable) do
+								itemsSeen[v] = true
+							end
+						end
+					end
+					for item, _ in pairs(itemsSeen) do
+						applyBypassToItem(item)
+					end
+				end
+				collectAndBypass()
+				if bedwars.Shop and bedwars.Shop.getShop and not originalGetShop then
+					originalGetShop = bedwars.Shop.getShop
+					bedwars.Shop.getShop = function(...)
+						local result = originalGetShop(...)
+						if type(result) == "table" then
+							applyBypassToTable(result)
+						end
+						return result
+					end
+				end
+				
+				local shopController = getShopController()
+				if shopController and shopController.BedwarsShop and shopController.BedwarsShop.getShop then
+					if not tiered["shopControllerHooked"] then
+						tiered["shopControllerHooked"] = true
+						local originalControllerGetShop = shopController.BedwarsShop.getShop
+						shopController.BedwarsShop.getShop = function(...)
+							local result = originalControllerGetShop(...)
+							if type(result) == "table" then
+								applyBypassToTable(result)
+							end
+							return result
+						end
+					end
+				end
+			else
+				for item, _ in pairs(shopItemsTracked) do
+					if item and type(item) == "table" then
+						if tiered[item] ~= nil then
+							item.tiered = tiered[item]
+						end
+						if nexttier[item] ~= nil then
+							item.nextTier = nexttier[item]
+						end
+					end
+				end
+				
+				if tiered["shopControllerHooked"] then
+					tiered["shopControllerHooked"] = nil
+				end
+				
+				if originalGetShop then
+					bedwars.Shop.getShop = originalGetShop
+					originalGetShop = nil
+				end
+				
+				table.clear(tiered)
+				table.clear(nexttier)
+				table.clear(shopItemsTracked)
+			end
+		end,
+		Tooltip = 'Lets you buy things like armor and tools early.'
+	})
 end)
 	
 run(function()
@@ -15505,159 +15515,6 @@ run(function()
 		end
 	})
 end)
-
-run(function()
-    local BuyBlocksModule
-    local GUICheck
-    local DelaySlider
-    local MaxAmount
-    local LowBlocksToggle
-    local LowBlocksThreshold
-    local running = false
-
-    local function getShopNPC()
-        local shopFound = false
-        if entitylib.isAlive then
-            local localPosition = entitylib.character.RootPart.Position
-            for _, v in store.shop do
-                if (v.RootPart.Position - localPosition).Magnitude <= 20 then
-                    shopFound = true
-                    break
-                end
-            end
-        end
-        return shopFound
-    end
-
-    local function getBlockCount()
-        local count = 0
-        for _, item in store.inventory.inventory.items do
-            if bedwars.ItemMeta[item.itemType].block then
-                count = count + item.amount
-            end
-        end
-        return count
-    end
-
-    BuyBlocksModule = vape.Categories.Inventory:CreateModule({
-        Name = "BuyBlocks",
-        Function = function(enabled)
-            running = enabled
-
-            if enabled then
-                task.spawn(function()
-                    while running do
-                        local currentBlocks = getBlockCount()
-                        local shouldBuy = true
-
-                        if currentBlocks >= MaxAmount.Value then
-                            shouldBuy = false
-                        end
-
-                        if LowBlocksToggle.Enabled then
-                            if currentBlocks >= LowBlocksThreshold.Value then
-                                shouldBuy = false
-                            end
-                        end
-
-                        if shouldBuy then
-                            local canBuy = true
-                            
-                            if GUICheck.Enabled then
-                                if bedwars.AppController:isAppOpen('BedwarsItemShopApp') then
-                                    canBuy = true
-                                else
-                                    canBuy = false
-                                end
-                            else
-                                canBuy = getShopNPC()
-                            end
-
-                            if canBuy then
-                                local args = {
-                                    {
-                                        shopItem = {
-                                            currency = "iron",
-                                            itemType = "wool_white",
-                                            amount = 16,
-                                            price = 8,
-                                            disabledInQueue = {
-                                                "mine_wars"
-                                            },
-                                            category = "Blocks"
-                                        },
-                                        shopId = "1_item_shop"
-                                    }
-                                }
-
-								pcall(function()
-									bedwars.Client:Get(remotes.BedwarsPurchaseItem).instance:InvokeServer(unpack(args))
-								end)
-                            end
-                        end
-
-                        task.wait(DelaySlider.Value)
-                    end
-                end)
-            end
-        end,
-        Tooltip = "Automatically buys wool blocks"
-    })
-
-    GUICheck = BuyBlocksModule:CreateToggle({
-        Name = "GUI Check",
-        Tooltip = "Only buy when shop GUI is open",
-        Default = false
-    })
-
-    MaxAmount = BuyBlocksModule:CreateSlider({
-        Name = "Max Amount",
-        Min = 16,
-        Max = 256,
-        Default = 128,
-        Tooltip = "Stop buying when you have this many blocks",
-        Suffix = function(val)
-            return val == 1 and " block" or " blocks"
-        end
-    })
-
-    LowBlocksToggle = BuyBlocksModule:CreateToggle({
-        Name = "Buy on Low Blocks",
-        Tooltip = "Only buy blocks when below threshold",
-        Default = false,
-        Function = function(callback)
-            LowBlocksThreshold.Object.Visible = callback
-        end
-    })
-
-    LowBlocksThreshold = BuyBlocksModule:CreateSlider({
-        Name = "Low Blocks Threshold",
-        Min = 0,
-        Max = 128,
-        Default = 32,
-        Tooltip = "Buy blocks when you have less than this amount",
-        Visible = false,
-        Suffix = function(val)
-            return val == 1 and " block" or " blocks"
-        end
-    })
-
-    DelaySlider = BuyBlocksModule:CreateSlider({
-        Name = "Delay",
-        Min = 0.1,
-        Max = 2,
-        Default = 0.1,
-        Decimal = 10,
-        Tooltip = "Delay between purchases (seconds)",
-        Suffix = "s"
-    })
-
-    task.defer(function()
-        if LowBlocksThreshold and LowBlocksThreshold.Object then
-            LowBlocksThreshold.Object.Visible = false   
-        end
-    end)
-end)
 	
 run(function()
 	local AutoConsume
@@ -16318,28 +16175,6 @@ run(function()
 	})
 	Clear = AutoHotbar:CreateToggle({Name = 'Clear Hotbar'})
 	List = AutoHotbar:CreateHotbarList({})
-end)
-	
-run(function()
-    local CollectionService = game:GetService('CollectionService')
-    
-    local antiweb = vape.Categories.Inventory:CreateModule({
-        Name = 'AntiCobweb',
-        Function = function(call: boolean): ()
-            if call then
-                repeat
-                    for _, v: Part in CollectionService:GetTagged('spider-queen-web-block') do
-                        local interest: TouchTransmitter? = v:FindFirstChildWhichIsA('TouchTransmitter')
-                        if interest then
-                            interest:Destroy()
-                        end
-                    end
-                    task.wait(0.1)
-                until not antiweb.Enabled
-            end
-        end,
-        Tooltip = 'Prevents you from getting cobwebbed'
-    })
 end)
 
 run(function()
@@ -19809,7 +19644,7 @@ run(function()
 	end
 	
 	RemovePlayerLevel = vape.Categories.Render:CreateModule({
-		Name = 'Remove Player Level',
+		Name = 'RemovePlayerLevelUI',
 		Function = function(callback)
 			if callback then
 				local existingTabList = lplr.PlayerGui:FindFirstChild("TabListScreenGui")
@@ -19930,7 +19765,7 @@ run(function()
 	end
 	
 	OG4v4v4v4 = vape.Categories.Render:CreateModule({
-		Name = 'OG 4v4v4v4',
+		Name = 'OG4v4v4v4',
 		Function = function(callback)
 			if callback then
 				local OrangeMaterial = Instance.new('MaterialVariant')
@@ -20576,7 +20411,7 @@ run(function()
     local renderConn
 
     OGNametags = vape.Categories.Render:CreateModule({
-        Name = "OG Nametags",
+        Name = "OGNametags",
         Function = function(callback)
             if callback then
                 for _, plr in ipairs(playersService:GetPlayers()) do
@@ -30625,164 +30460,6 @@ run(function()
             end
         end
     })
-end)
-
-run(function()
-	local LayeredClothing
-	local desc
-	local myUserId = lplr.UserId
-	local activeConnection = nil
-	local isRunning = false
-
-	local function itemAdded(v, manual)
-		if (not v:GetAttribute('LayeredClothing')) and (
-			(v:IsA('Accessory') and (not v:GetAttribute('InvItem')) and (not v:GetAttribute('ArmorSlot')))
-			or v:IsA('ShirtGraphic') or v:IsA('Shirt') or v:IsA('Pants') or v:IsA('BodyColors') or manual
-		) then
-			repeat
-				task.wait()
-				v.Parent = game
-			until v.Parent == game
-			v:ClearAllChildren()
-			v:Destroy()
-		end
-	end
-
-	local function disconnectActive()
-		if activeConnection then
-			activeConnection:Disconnect()
-			activeConnection = nil
-		end
-	end
-
-	local function cleanup()
-		disconnectActive()
-		if desc then
-			desc:Destroy()
-			desc = nil
-		end
-	end
-
-	local function characterAdded(char)
-		if not LayeredClothing.Enabled then return end
-		if not char then return end
-
-		disconnectActive()
-
-		task.wait(0.1)
-
-		char.Archivable = true
-		local clone = char:Clone()
-		clone.Parent = game
-
-		local fetchedDesc = nil
-		repeat
-			if pcall(function()
-				fetchedDesc = playersService:GetHumanoidDescriptionFromUserId(myUserId)
-			end) and fetchedDesc then break end
-			task.wait(1)
-		until not LayeredClothing.Enabled
-
-		if not LayeredClothing.Enabled or not fetchedDesc then
-			clone:ClearAllChildren()
-			clone:Destroy()
-			return
-		end
-
-		local humanoid = char:FindFirstChildOfClass('Humanoid')
-		local originalDesc = humanoid and humanoid:FindFirstChildOfClass('HumanoidDescription')
-		if originalDesc then
-			fetchedDesc.JumpAnimation = originalDesc.JumpAnimation
-			fetchedDesc.HeightScale = originalDesc.HeightScale
-		end
-
-		for _, v in ipairs(clone:GetChildren()) do
-			if v:IsA('Accessory') or v:IsA('ShirtGraphic') or v:IsA('Shirt') or v:IsA('Pants') then
-				v:ClearAllChildren()
-				v:Destroy()
-			end
-		end
-
-		local cloneHumanoid = clone:FindFirstChildOfClass('Humanoid')
-		if cloneHumanoid then
-			cloneHumanoid:ApplyDescriptionClientServer(fetchedDesc)
-		end
-
-		for _, v in ipairs(char:GetChildren()) do
-			itemAdded(v)
-		end
-
-		activeConnection = char.ChildAdded:Connect(itemAdded)
-
-		local animateClone = clone:FindFirstChild('Animate')
-		local animateReal = char:FindFirstChild('Animate')
-		if animateClone and animateReal then
-			for _, v in ipairs(animateClone:GetChildren()) do
-				local real = animateReal:FindFirstChild(v.Name)
-				if real then
-					local anim = v:FindFirstChildWhichIsA('Animation')
-					local realanim = real:FindFirstChildWhichIsA('Animation')
-					if anim and realanim then
-						realanim.AnimationId = anim.AnimationId
-					end
-				end
-			end
-		end
-
-		local head = char:FindFirstChild('Head')
-		for _, v in ipairs(clone:GetChildren()) do
-			v:SetAttribute('LayeredClothing', true)
-			if v:IsA('Accessory') then
-				for _, v2 in ipairs(v:GetDescendants()) do
-					if v2:IsA('Weld') and v2.Part1 then
-						local part = char:FindFirstChild(v2.Part1.Name)
-						if part then v2.Part1 = part end
-					end
-				end
-				v.Parent = char
-			elseif v:IsA('ShirtGraphic') or v:IsA('Shirt') or v:IsA('Pants') or v:IsA('BodyColors') then
-				v.Parent = char
-			elseif head and v.Name == 'Head' and head:IsA('MeshPart') and not head:FindFirstChild('FaceControls') then
-				head.MeshId = v.MeshId
-			end
-		end
-
-		local localface = char:FindFirstChild('face', true)
-		local cloneface = clone:FindFirstChild('face', true)
-		if localface and cloneface then
-			itemAdded(localface, true)
-			if head then
-				cloneface.Parent = head
-			end
-		end
-
-		if originalDesc then
-			pcall(function()
-				originalDesc:SetEmotes(fetchedDesc:GetEmotes())
-				originalDesc:SetEquippedEmotes(fetchedDesc:GetEquippedEmotes())
-			end)
-		end
-
-		task.wait(0.5)
-		clone:ClearAllChildren()
-		clone:Destroy()
-		fetchedDesc:Destroy()
-	end
-
-	LayeredClothing = vape.Categories.Render:CreateModule({
-		Name = 'LayeredClothing',
-		Function = function(callback)
-			if callback then
-				LayeredClothing:Clean(entitylib.Events.LocalAdded:Connect(characterAdded))
-				if entitylib.isAlive then
-					characterAdded(entitylib.character)
-				end
-			else
-				cleanup()
-			end
-		end,
-		Tooltip = 'Applies layered clothing from your Roblox avatar, client-sided. Persists through death.'
-	})
 end)
 
 run(function()
