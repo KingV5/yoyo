@@ -1,11 +1,13 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 repeat task.wait() until game:IsLoaded()
 if shared.vape then shared.vape:Uninject() end
 
 if identifyexecutor then
-    if table.find({'Argon', 'Wave'}, ({identifyexecutor()})[1]) then
-        getgenv().setthreadidentity = nil
-    end
+	if table.find({'Argon', 'Wave', 'Seliware', 'Volt'}, ({identifyexecutor()})[1]) then
+		getgenv().setthreadidentity = nil
+	end
 end
 
 local args = ...
@@ -23,18 +25,22 @@ end
 
 local vape
 local loadstring = function(...)
-    local res, err = loadstring(...)
-    if err and vape then
-        vape:CreateNotification('vape', 'failed to load: ' .. err, 30, 'alert')
-    end
-    return res
+	local res, err = loadstring(...)
+	if err and vape then
+		vape:CreateNotification('KingV5', 'Failed to load : '..err, 30, 'alert')
+	end
+	return res
 end
-local queue_on_teleport = queue_on_teleport or function() end
+local queue_on_teleport = queue_on_teleport or function() print('how does an executer not support queueonteleport') end
 local isfile = isfile or function(file)
-    local suc, res = pcall(function() return readfile(file) end)
-    return suc and res ~= nil and res ~= ''
+	local suc, res = pcall(function()
+		return readfile(file)
+	end)
+	return suc and res ~= nil and res ~= ''
 end
-local cloneref = cloneref or function(obj) return obj end
+local cloneref = cloneref or function(obj)
+	return obj
+end
 local playersService = cloneref(game:GetService('Players'))
 
 local function downloadFile(path, func)
@@ -65,9 +71,12 @@ local function finishLoading()
     vape:Clean(playersService.LocalPlayer.OnTeleport:Connect(function()
         if (not teleportedServers) and (not shared.VapeIndependent) then
             teleportedServers = true
-            vape:Uninject()  
+            vape:Uninject()
+            shared.vape = nil
+            vape:Save()
             local teleportScript = [[
                 shared.vapereload = true
+                task.wait(0.5)
                 if shared.VapeDeveloper then
                     loadstring(readfile('newvape/loader.lua'), 'loader')()
                 else
@@ -80,8 +89,11 @@ local function finishLoading()
             if shared.VapeCustomProfile then
                 teleportScript = 'shared.VapeCustomProfile = "' .. shared.VapeCustomProfile .. '"\n' .. teleportScript
             end
-            vape:Save()
-            queue_on_teleport(teleportScript)
+            local success, err = pcall(queue_on_teleport, teleportScript)
+            if not success then
+                shared.vapereload = true
+                warn('[AEROV4] queue_on_teleport failed u may need to reinject manually after teleport')
+            end
         end
     end))
 
@@ -89,7 +101,7 @@ local function finishLoading()
         if not vape.Categories then return end
         if vape.Categories.Main.Options['GUI bind indicator'].Enabled then
             local name = shared.ValidatedUsername and ('wsg, ' .. shared.ValidatedUsername .. ' :D ') or 'welcome '
-            vape:CreateNotification('[KingV5] Finished Loading', name .. (vape.VapeButton and 'Press the button in the top right to open GUI' or 'Press ' .. table.concat(vape.Keybind, ' + '):upper() .. ' to open GUI'), 5)
+            vape:CreateNotification('[AEROV4] Finished Loading', name .. (vape.VapeButton and 'Press the button in the top right to open GUI' or 'Press ' .. table.concat(vape.Keybind, ' + '):upper() .. ' to open GUI'), 5)
         end
     end
 end
@@ -103,8 +115,16 @@ if not isfolder('newvape/assets/' .. gui) then
     makefolder('newvape/assets/' .. gui)
 end
 
-vape = loadstring(downloadFile('newvape/guis/' .. gui .. '.lua'), 'gui')()
+local guiFunc, guiErr = loadstring(downloadFile('newvape/guis/' .. gui .. '.lua'), 'gui')
+if not guiFunc then
+    error('[AEROV4] Failed to load GUI: ' .. tostring(guiErr))
+end
+vape = guiFunc()
+if not vape then
+    error('[AEROV4] GUI returned nil file may be corrupted try deleting newvape/guis/' .. gui .. '.lua and reinjecting.')
+end
 shared.vape = vape
+task.wait(0.1)
 
 if getgenv().Closet then
     local LogService = cloneref(game:GetService('LogService'))
