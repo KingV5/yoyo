@@ -82,7 +82,7 @@ else
         task.wait(0.5)
         local accounts = fetchAccounts()
         if not accounts then
-            createNotification("error", "failed to check account. check ur wifi. dm aero", 3)
+            createNotification("error", "failed to check account. check ur wifi. dm King", 3)
             return
         end
 
