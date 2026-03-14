@@ -1,5 +1,6 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local function safeGetProto(func, index)
     if not func then return nil end
     local success, proto = pcall(debug.getconstant, func, index)
@@ -1255,19 +1256,9 @@ run(function()
 		end
 	end
 
-	if identifyexecutor and table.find({'Xeno', 'Solara'}, ({identifyexecutor()})[1]) then
-		local updateThread = task.spawn(function()
-			repeat
-				updateStore(bedwars.Store:getState(), {})
-				task.wait(1)
-			until vape.Loaded == nil
-		end)
-		vape:Clean(function() task.cancel(updateThread) end)
-	else
-		local storeChanged = bedwars.Store.changed:connect(updateStore)
-		vape:Clean(function() storeChanged:disconnect() end)
-		updateStore(bedwars.Store:getState(), {})
-	end
+	local storeChanged = bedwars.Store.changed:connect(updateStore)
+	vape:Clean(function() storeChanged:disconnect() end)
+	updateStore(bedwars.Store:getState(), {})
 
 	for _, event in {'MatchEndEvent', 'EntityDeathEvent', 'BedwarsBedBreak', 'BalloonPopped', 'AngelProgress', 'GrapplingHookFunctions'} do
 		if not vape.Connections then return end
@@ -12833,42 +12824,6 @@ run(function()
         return result
     end
 
-    local tntAddedConnection = workspace.DescendantAdded:Connect(function(obj)
-        if obj.Name == "tnt" and obj:IsA("Part") then
-            allTntBlocks[obj] = true
-            
-            task.defer(function()
-                local fixedPos = fixPosition(obj.Position)
-                local posKey = string.format("%.0f,%.0f,%.0f", fixedPos.X, fixedPos.Y, fixedPos.Z)
-                
-                local placerId = obj:GetAttribute("PlacedByUserId")
-                if placerId and placerId == lplr.UserId then
-                    allOurTnt[obj] = true
-                    ourTntPositions[posKey] = true
-                elseif ourTntPositions[posKey] then
-                    allOurTnt[obj] = true
-                end
-            end)
-
-            local ancestryConnection
-            ancestryConnection = obj.AncestryChanged:Connect(function()
-                if not obj.Parent then
-                    allOurTnt[obj] = nil
-                    allTntBlocks[obj] = nil
-                    counteredTnt[obj] = nil
-                    
-                    local fixedPos = fixPosition(obj.Position)
-                    local posKey = string.format("%.0f,%.0f,%.0f", fixedPos.X, fixedPos.Y, fixedPos.Z)
-                    ourTntPositions[posKey] = nil
-                    
-                    if ancestryConnection then
-                        ancestryConnection:Disconnect()
-                    end
-                end
-            end)
-        end
-    end)
-
     local function isEnemyTnt(tntBlock)
         if not tntBlock or not tntBlock.Parent then return false end
 
@@ -12902,10 +12857,44 @@ run(function()
     AutoCounter = vape.Categories.World:CreateModule({
         Name = 'AutoCounter',
         Function = function(callback)
-            
             if callback then
                 table.clear(counteredTnt)
-                
+                local tntAddedConnection = workspace.DescendantAdded:Connect(function(obj)
+                    if obj.Name == "tnt" and obj:IsA("Part") then
+                        allTntBlocks[obj] = true
+                        
+                        task.defer(function()
+                            local fixedPos = fixPosition(obj.Position)
+                            local posKey = string.format("%.0f,%.0f,%.0f", fixedPos.X, fixedPos.Y, fixedPos.Z)
+                            
+                            local placerId = obj:GetAttribute("PlacedByUserId")
+                            if placerId and placerId == lplr.UserId then
+                                allOurTnt[obj] = true
+                                ourTntPositions[posKey] = true
+                            elseif ourTntPositions[posKey] then
+                                allOurTnt[obj] = true
+                            end
+                        end)
+
+                        local ancestryConnection
+                        ancestryConnection = obj.AncestryChanged:Connect(function()
+                            if not obj.Parent then
+                                allOurTnt[obj] = nil
+                                allTntBlocks[obj] = nil
+                                counteredTnt[obj] = nil
+                                
+                                local fixedPos = fixPosition(obj.Position)
+                                local posKey = string.format("%.0f,%.0f,%.0f", fixedPos.X, fixedPos.Y, fixedPos.Z)
+                                ourTntPositions[posKey] = nil
+                                
+                                if ancestryConnection then
+                                    ancestryConnection:Disconnect()
+                                end
+                            end
+                        end)
+                    end
+                end)
+                AutoCounter:Clean(tntAddedConnection)  
                 for tntBlock in pairs(allTntBlocks) do
                     if tntBlock.Parent then
                         local placerId = tntBlock:GetAttribute("PlacedByUserId")
@@ -13012,13 +13001,6 @@ run(function()
         Default = true,
         Tooltip = 'Only works when holding TNT'
     })
-    
-    task.spawn(function()
-        repeat task.wait(1) until not AutoCounter
-        if tntAddedConnection then
-            tntAddedConnection:Disconnect()
-        end
-    end)
 end)
 	
 run(function()
@@ -23409,96 +23391,6 @@ run(function()
 end)
 
 run(function()
-	local FakePos
-	local fflagWorking = false
-	local fflagName = 'NextGenReplicatorEnabledWrite4'
-	
-	local function setFFlag(value)
-		local success = pcall(function()
-			setfflag(fflagName, value)
-		end)
-		
-		if success then
-			local verifySuccess, currentValue = pcall(function()
-				return getfflag(fflagName)
-			end)
-			
-			if verifySuccess and currentValue == value then
-				fflagWorking = true
-				return true
-			end
-		end
-		
-		fflagWorking = false
-		return false
-	end
-	
-	local function cleanup()
-		pcall(function()
-			setfflag(fflagName, 'false')
-		end)
-		
-		if store.fakePosEnabled ~= nil then
-			store.fakePosEnabled = nil
-		end
-	end
-	
-	FakePos = vape.Categories.Blatant:CreateModule({
-		Name = "FakePos",
-		Tooltip = 'Desyncs your position from the server (Fake Position)',
-		Function = function(callback)
-			if callback then
-				local success = setFFlag('true')
-				
-				if success then
-					store.fakePosEnabled = true
-					
-					task.spawn(function()
-						task.wait(0.5)
-						if FakePos.Enabled and fflagWorking then
-							local check = pcall(function()
-								return getfflag(fflagName)
-							end)
-							
-							if not check then
-								notif("FakePos", "FFlag no longer available - disabling", 3)
-								FakePos:Toggle()
-							end
-						end
-					end)
-				else
-					notif("FakePos", "FFlag not available in this Roblox version", 3)
-					FakePos:Toggle()
-					return
-				end
-			else
-				cleanup()
-			end
-		end,
-		ExtraText = function()
-			return fflagWorking and "Active" or "Inactive"
-		end
-	})
-	
-	FakePos:Clean(playersService.PlayerRemoving:Connect(function(player)
-		if player == lplr then
-			cleanup()
-		end
-	end))
-	
-	task.spawn(function()
-		while true do
-			task.wait(5)
-			if not FakePos.Enabled and (store.fakePosEnabled or fflagWorking) then
-				cleanup()
-			end
-		end
-	end)
-	
-	cleanup()
-end)
-
-run(function()
 	local RemoveEffects
 	
 	RemoveEffects = vape.Categories.BoostFPS:CreateModule({
@@ -23683,11 +23575,7 @@ run(function()
         table.insert(notifQueue, { title = title, message = message, duration = duration or 5 })
     end
 
-    RunService.Heartbeat:Connect(function()
-        if #notifQueue == 0 then return end
-        local entry = table.remove(notifQueue, 1)
-        pcall(notif, entry.title, entry.message, entry.duration)
-    end)
+    local heartbeatConn = nil
 
     local autoMinigameActive    = false
     local pullAnimationTrack    = nil
@@ -23853,6 +23741,14 @@ run(function()
                 if ESPToggle.Enabled           then setupESP()          end
                 if AutoMinigameToggle.Enabled  then setupAutoMinigame() end
                 if FishermanSpyToggle.Enabled  then setupFishermanSpy() end
+
+                heartbeatConn = RunService.Heartbeat:Connect(function()
+                    if #notifQueue == 0 then return end
+                    local entry = table.remove(notifQueue, 1)
+                    pcall(notif, entry.title, entry.message, entry.duration)
+                end)
+                Fisherman:Clean(heartbeatConn)
+
             else
                 autoMinigameActive = false
                 stopAllAnimations()
