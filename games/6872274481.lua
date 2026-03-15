@@ -19094,7 +19094,7 @@ run(function()
 				checktype = 'spectator',
 				detectedTime = tick()
 			}
-			local alertMsg = 'Spectator: ' .. playerName .. ' (' .. tostring(playerId) .. ') [Has you added]'
+			local alertMsg = 'Spectator: ' .. playerName .. ' (' .. tostring(playerId) .. ')'
 			notif('StaffDetector', alertMsg, duration, 'warning')
 		end
 
