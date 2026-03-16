@@ -680,9 +680,14 @@ run(function()
 						end))
 					end
 
+					local invUpdatePending = {}
+
 					for _, v in updateobjects do
 						table.insert(entity.Connections, v:GetPropertyChangedSignal('Value'):Connect(function()
+							if invUpdatePending[entity] then return end
+							invUpdatePending[entity] = true
 							task.delay(0.1, function()
+								invUpdatePending[entity] = nil
 								if bedwars.getInventory then
 									store.inventories[plr] = bedwars.getInventory(plr)
 									entitylib.Events.EntityUpdated:Fire(entity)
@@ -1373,28 +1378,6 @@ run(function()
 			kills:Increment()
 		end
 	end))
-
-	local airTimeThreadRunning = true
-	local airTimeThread = task.spawn(function()
-		while airTimeThreadRunning do
-			if entitylib.isAlive then
-				entitylib.character.AirTime = entitylib.character.Humanoid.FloorMaterial ~= Enum.Material.Air and tick() or entitylib.character.AirTime
-			end
-
-			for _, v in entitylib.List do
-				v.LandTick = math.abs(v.RootPart.Velocity.Y) < 0.1 and tick() or v.LandTick
-				if (tick() - v.LandTick) > 0.2 and v.Jumps ~= 0 then
-					v.Jumps = 0
-					v.Jumping = false
-				end
-			end
-			task.wait(0.1)
-		end
-	end)
-	vape:Clean(function()
-		airTimeThreadRunning = false
-		task.cancel(airTimeThread)
-	end)
 
 	pcall(function()
 		bedwars.Shop = require(replicatedStorage.TS.games.bedwars.shop['bedwars-shop']).BedwarsShop
@@ -4867,7 +4850,6 @@ run(function()
     local flyCooldownActive = false
     local lastGroundTouchTime = 0
     local MAX_FLY_TIME = 2.5
-
     local tick = tick
     local task_wait = task.wait
     local math_max = math.max
@@ -4877,13 +4859,13 @@ run(function()
     local vector3zero = Vector3.zero
     local udim2new = UDim2.new
     local cframeLookAlong = CFrame.lookAlong
-    
     local cachedBalloonCount = 0
     local lastBalloonCheck = 0
     local balloonCheckInterval = 0.2 
-    
     local cachedMatchState = 0
     local lastMatchStateCheck = 0
+    local lastGroundTime = tick()
+    local airTime = 0
     
     local function createMobileButton(name, position, icon)
         local button = Instance.new("TextButton")
@@ -5002,15 +4984,6 @@ run(function()
                     end
                 end))
 
-                task.spawn(function()
-                    repeat
-                        task_wait()
-                        if entitylib.isAlive then
-                            entitylib.groundTick = entitylib.character.Humanoid.FloorMaterial ~= Enum.Material.Air and tick() or entitylib.groundTick
-                        end
-                    until not Fly.Enabled
-                end)
-
                 local renderFrameCounter = 0
                 Fly:Clean(runService.RenderStepped:Connect(function(delta)
                     if FlyAnywayProgressBar.Enabled and Fly.Enabled then
@@ -5034,6 +5007,12 @@ run(function()
                             cachedBalloonCount = lplr.Character:GetAttribute('InflatedBalloons') or 0
                             cachedMatchState = store.matchState
                         end
+
+                        local humanoid = entitylib.character.Humanoid
+                        if humanoid.FloorMaterial ~= Enum.Material.Air then
+                            lastGroundTime = now
+                        end
+                        airTime = now - lastGroundTime
                         
                         local flyAllowed = cachedBalloonCount > 0 or cachedMatchState == 2
                         
@@ -5058,8 +5037,7 @@ run(function()
 
                         if not flyAllowed then
                             if tpToggle then
-                                local airleft = (now - entitylib.character.AirTime)
-                                if airleft > 2 then
+                                if airTime > 2 then  
                                     if not oldy then
                                         rayCheck.FilterDescendantsInstances = {lplr.Character, gameCamera, AntiVoidPart}
                                         rayCheck.CollisionGroup = root.CollisionGroup
@@ -8873,6 +8851,10 @@ run(function()
 								return
 							end
 							
+							if not isSword() then
+								return
+							end
+							
 							if FirstPersonCheck.Enabled and not isFirstPerson() then
 								return
 							end
@@ -8913,6 +8895,10 @@ run(function()
 						task.wait(0.15) 
 						if autoShootEnabled and not _G.autoShootLock then
 							if not hasArrows() then
+								continue
+							end
+							
+							if not isSword() then
 								continue
 							end
 							
@@ -10271,7 +10257,7 @@ run(function()
     local Distance
     local Equipment
     local DrawingToggle
-    local ShowKits 
+    local ShowKits
     local Rank
     local Scale
     local FontOption
@@ -10419,14 +10405,14 @@ run(function()
             if not Targets.Players.Enabled and ent.Player then return end
             if not Targets.NPCs.Enabled and ent.NPC then return end
             if Teammates.Enabled and (not ent.Targetable) and (not ent.Friend) then return end
-            Strings[ent] = ent.Player and whitelist:tag(ent.Player, true)..(DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
+            Strings[ent] = ent.Player and whitelist:tag(ent.Player, true) .. (DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
 
             if Health.Enabled then
-                Strings[ent] = Strings[ent]..' '..math_round(ent.Health)
+                Strings[ent] = Strings[ent] .. ' ' .. math_round(ent.Health)
             end
 
             if Distance.Enabled then
-                Strings[ent] = '[%s] '..Strings[ent]
+                Strings[ent] = '[%s] ' .. Strings[ent]
             end
             local textSize = 14 * Scale.Value
             local fontFace = FontOption.Value
@@ -10447,7 +10433,7 @@ run(function()
             nametag.Parent = Folder
 
             if Equipment.Enabled then
-                for i, v in {'Hand', 'Helmet', 'Chestplate', 'Boots'} do
+                for i, v in { 'Hand', 'Helmet', 'Chestplate', 'Boots' } do
                     local Icon = Instance.new('ImageLabel')
                     Icon.Name = v
                     Icon.Size = udim2fromOffset(30, 30)
@@ -10460,16 +10446,16 @@ run(function()
                 if ent.Player and store.inventories[ent.Player] then
                     local inventory = store.inventories[ent.Player]
                     if nametag.Hand then
-                        nametag.Hand.Image = bedwars.getIcon(inventory.hand or {itemType = ''}, true)
+                        nametag.Hand.Image = bedwars.getIcon(inventory.hand or { itemType = '' }, true)
                     end
                     if nametag.Helmet then
-                        nametag.Helmet.Image = bedwars.getIcon(inventory.armor[4] or {itemType = ''}, true)
+                        nametag.Helmet.Image = bedwars.getIcon(inventory.armor[4] or { itemType = '' }, true)
                     end
                     if nametag.Chestplate then
-                        nametag.Chestplate.Image = bedwars.getIcon(inventory.armor[5] or {itemType = ''}, true)
+                        nametag.Chestplate.Image = bedwars.getIcon(inventory.armor[5] or { itemType = '' }, true)
                     end
                     if nametag.Boots then
-                        nametag.Boots.Image = bedwars.getIcon(inventory.armor[6] or {itemType = ''}, true)
+                        nametag.Boots.Image = bedwars.getIcon(inventory.armor[6] or { itemType = '' }, true)
                     end
                 end
             end
@@ -10505,7 +10491,7 @@ run(function()
                 local rankIcon = Instance.new('ImageLabel')
                 rankIcon.Name = 'RankIcon'
                 rankIcon.Size = udim2fromOffset(30, 30)
-                rankIcon.Position = udim2fromOffset(size.X + 10, -4)  
+                rankIcon.Position = udim2fromOffset(size.X + 10, -4)
                 rankIcon.BackgroundTransparency = 1
                 rankIcon.Image = ''
                 rankIcon.Parent = nametag
@@ -10516,7 +10502,7 @@ run(function()
                     if not plr then return end
 
                     local ok, success, data = pcall(function()
-                        return bedwars.Client:Get(remotes.Ranks):CallServerAsync({plr.UserId}):await()
+                        return bedwars.Client:Get(remotes.Ranks):CallServerAsync({ plr.UserId }):await()
                     end)
 
                     if vape.ThreadFix then setthreadidentity(8) end
@@ -10549,21 +10535,21 @@ run(function()
             nametag.Text.Size = 15 * Scale.Value
             nametag.Text.Font = 0
             nametag.Text.ZIndex = 2
-            Strings[ent] = ent.Player and whitelist:tag(ent.Player, true)..(DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
+            Strings[ent] = ent.Player and whitelist:tag(ent.Player, true) .. (DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
 
             if Health.Enabled then
-                Strings[ent] = Strings[ent]..' '..math_round(ent.Health)
+                Strings[ent] = Strings[ent] .. ' ' .. math_round(ent.Health)
             end
 
             if Distance.Enabled then
-                Strings[ent] = '[%s] '..Strings[ent]
+                Strings[ent] = '[%s] ' .. Strings[ent]
             end
 
             if ShowKits.Enabled and ent.Player then
                 local kit = ent.Player:GetAttribute('PlayingAsKits')
                 if kit then
                     local kitName = kit:gsub("_", " "):gsub("^%l", string.upper)
-                    Strings[ent] = Strings[ent]..' ('..kitName..')'
+                    Strings[ent] = Strings[ent] .. ' (' .. kitName .. ')'
                 end
             end
 
@@ -10609,49 +10595,53 @@ run(function()
     local Updated = {
         Normal = function(ent)
             local nametag = Reference[ent]
-            if nametag then
-                Sizes[ent] = nil
-                Strings[ent] = ent.Player and whitelist:tag(ent.Player, true)..(DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
+            if not nametag then return end
 
-                if Health.Enabled then
-                    Strings[ent] = Strings[ent]..' '..math_round(ent.Health)
-                end
+            local now = tick()
+            if lastUpdate[ent] and (now - lastUpdate[ent]) < 0.2 then return end
+            lastUpdate[ent] = now
 
-                if Distance.Enabled then
-                    Strings[ent] = '[%s] '..Strings[ent]
-                end
+            Sizes[ent] = nil
+            Strings[ent] = ent.Player and whitelist:tag(ent.Player, true) .. (DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
 
-                if Equipment.Enabled and ent.Player and store.inventories[ent.Player] then
-                    local inventory = store.inventories[ent.Player]
-                    local currentEquip = {
-                        inventory.hand and inventory.hand.itemType or '',
-                        inventory.armor[4] and inventory.armor[4].itemType or '',
-                        inventory.armor[5] and inventory.armor[5].itemType or '',
-                        inventory.armor[6] and inventory.armor[6].itemType or ''
-                    }
+            if Health.Enabled then
+                Strings[ent] = Strings[ent] .. ' ' .. math_round(ent.Health)
+            end
 
-                    local equipKey = table.concat(currentEquip, "|")
-                    if equipmentCache[ent] ~= equipKey then
-                        equipmentCache[ent] = equipKey
-                        if nametag.Hand then
-                            nametag.Hand.Image = bedwars.getIcon(inventory.hand or {itemType = ''}, true)
-                        end
-                        if nametag.Helmet then
-                            nametag.Helmet.Image = bedwars.getIcon(inventory.armor[4] or {itemType = ''}, true)
-                        end
-                        if nametag.Chestplate then
-                            nametag.Chestplate.Image = bedwars.getIcon(inventory.armor[5] or {itemType = ''}, true)
-                        end
-                        if nametag.Boots then
-                            nametag.Boots.Image = bedwars.getIcon(inventory.armor[6] or {itemType = ''}, true)
-                        end
+            if Distance.Enabled then
+                Strings[ent] = '[%s] ' .. Strings[ent]
+            end
+
+            if Equipment.Enabled and ent.Player and store.inventories[ent.Player] then
+                local inventory = store.inventories[ent.Player]
+                local currentEquip = {
+                    inventory.hand and inventory.hand.itemType or '',
+                    inventory.armor[4] and inventory.armor[4].itemType or '',
+                    inventory.armor[5] and inventory.armor[5].itemType or '',
+                    inventory.armor[6] and inventory.armor[6].itemType or ''
+                }
+
+                local equipKey = table.concat(currentEquip, "|")
+                if equipmentCache[ent] ~= equipKey then
+                    equipmentCache[ent] = equipKey
+                    if nametag.Hand then
+                        nametag.Hand.Image = bedwars.getIcon(inventory.hand or { itemType = '' }, true)
+                    end
+                    if nametag.Helmet then
+                        nametag.Helmet.Image = bedwars.getIcon(inventory.armor[4] or { itemType = '' }, true)
+                    end
+                    if nametag.Chestplate then
+                        nametag.Chestplate.Image = bedwars.getIcon(inventory.armor[5] or { itemType = '' }, true)
+                    end
+                    if nametag.Boots then
+                        nametag.Boots.Image = bedwars.getIcon(inventory.armor[6] or { itemType = '' }, true)
                     end
                 end
-
-                local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, vector2new(100000, 100000))
-                nametag.Size = udim2fromOffset(size.X + 8, size.Y + 7)
-                nametag.Text = Strings[ent]
             end
+
+            local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, vector2new(100000, 100000))
+            nametag.Size = udim2fromOffset(size.X + 8, size.Y + 7)
+            nametag.Text = Strings[ent]
         end,
 
         Drawing = function(ent)
@@ -10659,14 +10649,14 @@ run(function()
             if nametag then
                 if vape.ThreadFix then setthreadidentity(8) end
                 Sizes[ent] = nil
-                Strings[ent] = ent.Player and whitelist:tag(ent.Player, true)..(DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
+                Strings[ent] = ent.Player and whitelist:tag(ent.Player, true) .. (DisplayName.Enabled and ent.Player.DisplayName or ent.Player.Name) or ent.Character.Name
 
                 if Health.Enabled then
-                    Strings[ent] = Strings[ent]..' '..math_round(ent.Health)
+                    Strings[ent] = Strings[ent] .. ' ' .. math_round(ent.Health)
                 end
 
                 if Distance.Enabled then
-                    Strings[ent] = '[%s] '..Strings[ent]
+                    Strings[ent] = '[%s] ' .. Strings[ent]
                     nametag.Text.Text = entitylib.isAlive and string_format(Strings[ent], math_floor((entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude)) or Strings[ent]
                 else
                     nametag.Text.Text = Strings[ent]
@@ -10676,7 +10666,7 @@ run(function()
                     local kit = ent.Player:GetAttribute('PlayingAsKits')
                     if kit then
                         local kitName = kit:gsub("_", " "):gsub("^%l", string.upper)
-                        nametag.Text.Text = nametag.Text.Text..' ('..kitName..')'
+                        nametag.Text.Text = nametag.Text.Text .. ' (' .. kitName .. ')'
                     end
                 end
 
@@ -10747,16 +10737,16 @@ run(function()
                         if equipmentCache[ent] ~= equipKey then
                             equipmentCache[ent] = equipKey
                             if nametag.Hand then
-                                nametag.Hand.Image = bedwars.getIcon(inventory.hand or {itemType = ''}, true)
+                                nametag.Hand.Image = bedwars.getIcon(inventory.hand or { itemType = '' }, true)
                             end
                             if nametag.Helmet then
-                                nametag.Helmet.Image = bedwars.getIcon(inventory.armor[4] or {itemType = ''}, true)
+                                nametag.Helmet.Image = bedwars.getIcon(inventory.armor[4] or { itemType = '' }, true)
                             end
                             if nametag.Chestplate then
-                                nametag.Chestplate.Image = bedwars.getIcon(inventory.armor[5] or {itemType = ''}, true)
+                                nametag.Chestplate.Image = bedwars.getIcon(inventory.armor[5] or { itemType = '' }, true)
                             end
                             if nametag.Boots then
-                                nametag.Boots.Image = bedwars.getIcon(inventory.armor[6] or {itemType = ''}, true)
+                                nametag.Boots.Image = bedwars.getIcon(inventory.armor[6] or { itemType = '' }, true)
                             end
                         end
                     end
@@ -16835,15 +16825,17 @@ run(function()
 	local Delay
 	local Range
 	local UpdateRate
-	local TargetList
-	local TargetBlocks
 	local Bed
+	local Tesla
+	local Hive
+	local IronOre
+	local Pinata
 	local LuckyBlock
-	local AutoTool
 	local Effect
 	local CustomHealth = {}
 	local Animation
 	local SelfBreak
+	local AutoTool
 	local LimitItem
 	local BreakClosestBlock
 	local PathToBed
@@ -16854,16 +16846,17 @@ run(function()
 	local cachedTargetBlocks = {}
 	local lastCacheUpdate = 0
 	local CACHE_INTERVAL = 0.5
-	
+
 	local tempSortTable = {}
-	local vectorToNormalId = {
-		[Vector3.new(1, 0, 0)] = Enum.NormalId.Right,
-		[Vector3.new(-1, 0, 0)] = Enum.NormalId.Left,
-		[Vector3.new(0, 1, 0)] = Enum.NormalId.Top,
-		[Vector3.new(0, -1, 0)] = Enum.NormalId.Bottom,
-		[Vector3.new(0, 0, 1)] = Enum.NormalId.Front,
-		[Vector3.new(0, 0, -1)] = Enum.NormalId.Back
-	}
+
+	local function getActiveTargetList()
+		local list = {}
+		if Tesla and Tesla.Enabled     then table.insert(list, 'tesla_trap') end
+		if Hive and Hive.Enabled       then table.insert(list, 'beehive') end
+		if IronOre and IronOre.Enabled then table.insert(list, 'iron_ore_mesh_block') end
+		if Pinata and Pinata.Enabled   then table.insert(list, 'pinata') end
+		return list
+	end
 
 	local function isSameTeam(userId)
 		if not userId then return false end
@@ -16875,30 +16868,6 @@ run(function()
 			end
 		end
 		return false
-	end
-
-	local function getSwordSlot()
-		for i, v in store.inventory.hotbar do
-			if v.item and bedwars.ItemMeta[v.item.itemType] then
-				local meta = bedwars.ItemMeta[v.item.itemType]
-				if meta.sword then
-					return i - 1
-				end
-			end
-		end
-		return nil
-	end
-
-	local function getPickaxeSlot()
-		for i, v in store.inventory.hotbar do
-			if v.item and bedwars.ItemMeta[v.item.itemType] then
-				local meta = bedwars.ItemMeta[v.item.itemType]
-				if meta.breakBlock then
-					return i - 1
-				end
-			end
-		end
-		return nil
 	end
 
 	local function customHealthbar(self, blockRef, health, maxHealth, changeHealth, block)
@@ -16918,7 +16887,7 @@ run(function()
 			part.Parent = workspace
 			self.healthbarPart = part
 			bedwars.QueryUtil:setQueryIgnored(self.healthbarPart, true)
-	
+
 			local mounted = bedwars.Roact.mount(create('BillboardGui', {
 				Size = UDim2.fromOffset(249, 102),
 				StudsOffset = Vector3.new(0, 2.5, 0),
@@ -16977,7 +16946,7 @@ run(function()
 					})
 				})
 			}), part)
-	
+
 			self.healthbarMaid:GiveTask(function()
 				cleanCheck = false
 				self.healthbarBlockRef = nil
@@ -16987,140 +16956,83 @@ run(function()
 				end
 				self.healthbarPart = nil
 			end)
-	
+
 			bedwars.RuntimeLib.Promise.delay(5):andThen(function()
 				if cleanCheck then
 					self.healthbarMaid:DoCleaning()
 				end
 			end)
 		end
-	
+
 		local newpercent = math.clamp((health - changeHealth) / maxHealth, 0, 1)
 		tweenService:Create(self.healthbarProgressRef:getValue(), TweenInfo.new(0.3), {
-			Size = UDim2.fromScale(newpercent, 1), BackgroundColor3 = Color3.fromHSV(math.clamp(newpercent / 2.5, 0, 1), 0.89, 0.75)
+			Size = UDim2.fromScale(newpercent, 1),
+			BackgroundColor3 = Color3.fromHSV(math.clamp(newpercent / 2.5, 0, 1), 0.89, 0.75)
 		}):Play()
 	end
-	
+
 	local hit = 0
-	
-	local sides = {}
-	for _, v in Enum.NormalId:GetEnumItems() do
-		if v.Name == "Bottom" then continue end
-		table.insert(sides, Vector3.FromNormalId(v) * 3)
-	end
 
-	local function hasDirectPathToBed(bedPos, playerPos)
-		local dir = (bedPos - playerPos).Unit
-		local distance = (bedPos - playerPos).Magnitude
-		local step = 3
-		local offsets = {
-			Vector3.new(0,0,0),
-			Vector3.new(1.5,0,0), Vector3.new(-1.5,0,0),
-			Vector3.new(0,0,1.5), Vector3.new(0,0,-1.5),
-			Vector3.new(1.5,0,1.5), Vector3.new(1.5,0,-1.5),
-			Vector3.new(-1.5,0,1.5), Vector3.new(-1.5,0,-1.5)
-		}
-
-		for i = step, distance, step do
-			local baseCheckPos = playerPos + dir * i
-			for _, offset in ipairs(offsets) do
-				local checkPos = baseCheckPos + offset
-				local blockPos = roundPos(checkPos)
-				if (blockPos - bedPos).Magnitude > 3 then 
-					local block = getPlacedBlock(blockPos)
-					if block and bedwars.BlockController:isBlockBreakable({blockPosition = blockPos/3}, lplr) then
-						return false, blockPos
-					end
-				end
-			end
-
-			local footY = playerPos.Y - (entitylib.character.HipHeight or 2) - 0.5
-			local belowBase = Vector3.new(baseCheckPos.X, footY, baseCheckPos.Z)
-			for _, offset in ipairs(offsets) do
-				local checkPos = belowBase + offset
-				local blockPos = roundPos(checkPos)
-				if (blockPos - bedPos).Magnitude > 3 then
-					local block = getPlacedBlock(blockPos)
-					if block and bedwars.BlockController:isBlockBreakable({blockPosition = blockPos/3}, lplr) then
-						return false, blockPos
-					end
-				end
-			end
-		end
-		return true, nil
-	end
-
-	local function hasPlayerMoved(currentPos, threshold)
-		if not lastPlayerPosition then
-			lastPlayerPosition = currentPos
-			return true
-		end
-		
-		local thresholdSq = (threshold or 2) ^ 2
-		local distSq = (currentPos - lastPlayerPosition).Magnitude
-		local moved = distSq > thresholdSq
-		
-		if moved then
-			lastPlayerPosition = currentPos
-		end
-		return moved
-	end
-
-	local function doBreak(block)
-		hit += 1
-		local success, result = pcall(function()
-			return bedwars.breakBlock(block, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled)
-		end)
-		if success then
-			local target, path, endpos = result, nil, nil
-			if type(result) == "table" then
-				target, path, endpos = unpack(result)
-			end
-			if path then
-				local currentnode = target
-				for _, part in parts do
-					part.Position = currentnode or Vector3.zero
-					if currentnode then
-						part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
-					end
-					currentnode = path[currentnode]
-				end
-			end
-		else
-			warn("failed to break block:", result)
-		end
-		task.wait(Delay.Value)
-		return true
-	end
-	
 	local function passesChecks(v)
 		local placedBy = v:GetAttribute('PlacedByUserId')
 		if not SelfBreak.Enabled then
 			if placedBy == lplr.UserId then return false end
 			if isSameTeam(placedBy) then return false end
+		else
+			if placedBy == lplr.UserId and (v.Name == 'bed' or v.Name == 'team_chest') then return false end
 		end
 		if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then return false end
 		if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then return false end
 		return true
 	end
 
-	local function updateTargetBlockCache(localPosition)
-		local currentTime = tick()
-		
-		if currentTime - lastCacheUpdate < CACHE_INTERVAL then
-			return
+	local function doBreak(block)
+		hit += 1
+		local target, path, endpos = bedwars.breakBlock(block, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled)
+		if path then
+			local currentnode = target
+			for _, part in parts do
+				part.Position = currentnode or Vector3.zero
+				if currentnode then
+					part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
+				end
+				currentnode = path[currentnode]
+			end
 		end
-		
+		task.wait(Delay.Value)
+		return true
+	end
+
+	local function findPathBlock(targetPos, playerPos)
+		local dir = (targetPos - playerPos)
+		local distance = dir.Magnitude
+		if distance < 3 then return nil end
+		dir = dir.Unit
+		local checked = {}
+		local step = 3
+		for i = step, distance - step, step do
+			local checkPos = roundPos(playerPos + dir * i)
+			local key = checkPos.X .. ',' .. checkPos.Y .. ',' .. checkPos.Z
+			if checked[key] then continue end
+			checked[key] = true
+			if (checkPos - targetPos).Magnitude < 4 then continue end
+			local block = getPlacedBlock(checkPos)
+			if block and bedwars.BlockController:isBlockBreakable({blockPosition = checkPos / 3}, lplr) then
+				return block
+			end
+		end
+		return nil
+	end
+
+	local function updateTargetBlockCache(localPosition, activeList)
+		local currentTime = tick()
+		if currentTime - lastCacheUpdate < CACHE_INTERVAL then return end
 		lastCacheUpdate = currentTime
 		table.clear(cachedTargetBlocks)
-		
-		if not TargetBlocks.Enabled then return end
-		if not TargetList.ListEnabled or #TargetList.ListEnabled == 0 then return end
-		
+		if #activeList == 0 then return end
 		local rangeSq = Range.Value ^ 2
-		
 		for _, obj in store.blocks do
-			if obj and obj:IsA("BasePart") and table.find(TargetList.ListEnabled, obj.Name) then
+			if obj and obj:IsA('BasePart') and table.find(activeList, obj.Name) then
 				local distSq = (obj.Position - localPosition).Magnitude
 				if distSq <= rangeSq then
 					table.insert(cachedTargetBlocks, obj)
@@ -17130,12 +17042,11 @@ run(function()
 	end
 
 	local function attemptBreakTargets(localPosition)
-		if not TargetBlocks.Enabled then return false end
-		if not TargetList.ListEnabled or #TargetList.ListEnabled == 0 then return false end
+		local activeList = getActiveTargetList()
+		if #activeList == 0 then return false end
 		if MouseDown.Enabled and not inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return false end
 
-		updateTargetBlockCache(localPosition)
-		
+		updateTargetBlockCache(localPosition, activeList)
 		if #cachedTargetBlocks == 0 then return false end
 
 		table.clear(tempSortTable)
@@ -17159,12 +17070,44 @@ run(function()
 		return false
 	end
 
+	local function attemptBreakBed(tab, localPosition)
+		if not tab then return false end
+		if MouseDown.Enabled and not inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return false end
+
+		local closestBed = nil
+		local closestDist = math.huge
+		for _, bedModel in ipairs(tab) do
+			local dist = (bedModel.Position - localPosition).Magnitude
+			if dist <= Range.Value and dist < closestDist then
+				closestDist = dist
+				closestBed = bedModel
+			end
+		end
+
+		if not closestBed then return false end
+		local blocker = findPathBlock(closestBed.Position, localPosition)
+
+		if blocker then
+			if not passesChecks(blocker) then return false end
+			return doBreak(blocker)
+		else
+			if PathToBed.Enabled then
+				return false
+			end
+			local block = getPlacedBlock(closestBed.Position)
+			if not block then return false end
+			if not bedwars.BlockController:isBlockBreakable({blockPosition = block.Position / 3}, lplr) then return false end
+			if not passesChecks(block) then return false end
+			return doBreak(block)
+		end
+	end
+
 	local function attemptBreak(tab, localPosition, isBed)
 		if not tab then return false end
 		if MouseDown.Enabled and not inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
 			return false
 		end
-		
+
 		if isBed then
 			local closestBedBlock, closestDist = nil, math.huge
 			for _, bedModel in ipairs(tab) do
@@ -17186,23 +17129,23 @@ run(function()
 				return doBreak(closestBedBlock)
 			end
 		end
-		
+
 		table.clear(tempSortTable)
 		local rangeSq = Range.Value ^ 2
-		
+
 		for _, v in tab do
 			local distSq = (v.Position - localPosition).Magnitude
 			if distSq <= rangeSq then
 				table.insert(tempSortTable, v)
 			end
 		end
-		
+
 		if #tempSortTable == 0 then return false end
-		
+
 		table.sort(tempSortTable, function(a, b)
 			return (a.Position - localPosition).Magnitude < (b.Position - localPosition).Magnitude
 		end)
-		
+
 		for _, v in tempSortTable do
 			if bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
 				if not passesChecks(v) then continue end
@@ -17214,7 +17157,6 @@ run(function()
 
 				if isBed and (BreakClosestBlock.Enabled or PathToBed.Enabled) then
 					hit += 1
-					
 					local hasPath, blockingPos = hasDirectPathToBed(v.Position, localPosition)
 					if hasPath then
 						if BreakClosestBlock.Enabled and not PathToBed.Enabled then
@@ -17236,7 +17178,7 @@ run(function()
 
 		return false
 	end
-	
+
 	Breaker = vape.Categories.Minigames:CreateModule({
 		Name = 'Breaker',
 		Function = function(callback)
@@ -17259,20 +17201,19 @@ run(function()
 						table.insert(parts, part)
 					end
 				end
-	
-				local beds = collection('bed', Breaker)
-				local luckyblock = collection('LuckyBlock', Breaker)
+
+				local beds        = collection('bed', Breaker)
+				local luckyblocks = collection('LuckyBlock', Breaker)
 
 				repeat
 					task.wait(1 / UpdateRate.Value)
 					if not Breaker.Enabled then break end
-					
+
 					if entitylib.isAlive then
 						local localPosition = entitylib.character.RootPart.Position
-
-						if attemptBreak(Bed.Enabled and beds, localPosition, true) then continue end
+						if Bed.Enabled and attemptBreakBed(beds, localPosition) then continue end
 						if attemptBreakTargets(localPosition) then continue end
-						if attemptBreak(LuckyBlock.Enabled and luckyblock, localPosition, false) then continue end
+						if attemptBreak(LuckyBlock.Enabled and luckyblocks, localPosition, false) then continue end
 
 						for _, v in parts do
 							v.Position = Vector3.zero
@@ -17283,6 +17224,7 @@ run(function()
 				for _, v in parts do
 					v.Parent = nil
 				end
+				table.clear(parts)
 				table.clear(cachedTargetBlocks)
 				lastCacheUpdate = 0
 				lastPlayerPosition = nil
@@ -17291,6 +17233,7 @@ run(function()
 		end,
 		Tooltip = 'Break blocks around you automatically'
 	})
+
 	Range = Breaker:CreateSlider({
 		Name = 'Break range',
 		Min = 1,
@@ -17306,7 +17249,7 @@ run(function()
 		Max = 0.3,
 		Default = 0.25,
 		Decimal = 100,
-		Suffix = "s" 
+		Suffix = 'seconds'
 	})
 	UpdateRate = Breaker:CreateSlider({
 		Name = 'Update rate',
@@ -17315,29 +17258,29 @@ run(function()
 		Default = 60,
 		Suffix = 'hz'
 	})
-	TargetBlocks = Breaker:CreateToggle({
-		Name = 'Target Blocks',
-		Default = false,
-		Tooltip = 'Enable to break blocks from the Target List. Skips own/teammate blocks unless Self Break is on.',
-		Function = function(callback)
-			if TargetList and TargetList.Object then
-				TargetList.Object.Visible = callback
-			end
-			lastCacheUpdate = 0
-		end
-	})
-
-	TargetList = Breaker:CreateTextList({
-		Name = 'Target List',
-		Tooltip = 'Block names to break (enemies only). Iron ore included by default.',
-		Default = {'tesla_trap', 'beehive', 'pinata', 'iron_ore_mesh_block'},
-		Function = function() 
-			lastCacheUpdate = 0
-		end
-	})
 	Bed = Breaker:CreateToggle({
 		Name = 'Break Bed',
 		Default = true
+	})
+	Tesla = Breaker:CreateToggle({
+		Name = 'Break Tesla',
+		Default = true,
+		Function = function() lastCacheUpdate = 0 end
+	})
+	Hive = Breaker:CreateToggle({
+		Name = 'Break Hive',
+		Default = true,
+		Function = function() lastCacheUpdate = 0 end
+	})
+	IronOre = Breaker:CreateToggle({
+		Name = 'Break Iron Ore',
+		Default = false,
+		Function = function() lastCacheUpdate = 0 end
+	})
+	Pinata = Breaker:CreateToggle({
+		Name = 'Break Pinata',
+		Default = false,
+		Function = function() lastCacheUpdate = 0 end
 	})
 	LuckyBlock = Breaker:CreateToggle({
 		Name = 'Break Lucky Block',
@@ -17360,7 +17303,7 @@ run(function()
 	Animation = Breaker:CreateToggle({Name = 'Animation'})
 	SelfBreak = Breaker:CreateToggle({
 		Name = 'Self Break',
-		Tooltip = 'When OFF: never breaks your own or any teammate\'s blocks. When ON: can break your own placed blocks (still skips beds/chests).'
+		Tooltip = "When OFF: never breaks your own or any teammate's blocks. When ON: can break your own placed blocks (still skips beds/chests)."
 	})
 	AutoTool = Breaker:CreateToggle({
 		Name = 'Auto Tool',
@@ -17372,7 +17315,7 @@ run(function()
 	})
 	BreakClosestBlock = Breaker:CreateToggle({
 		Name = 'Break Closest Block',
-		Tooltip = 'Breaks the first block blocking the path to the bed. When path is clear, it will break the bed itself.',
+		Tooltip = 'Breaks blocks blocking the path to the bed. When path is clear, breaks the bed itself.',
 		Default = false,
 		Function = function(callback)
 			if callback and PathToBed.Enabled then
@@ -17382,7 +17325,7 @@ run(function()
 	})
 	PathToBed = Breaker:CreateToggle({
 		Name = 'Path to Bed Only',
-		Tooltip = 'Breaks blocks to create path to bed, but does NOT break the bed itself.',
+		Tooltip = 'Breaks blocks blocking path to bed, but does NOT break the bed itself.',
 		Default = false,
 		Function = function(callback)
 			if callback and BreakClosestBlock.Enabled then
@@ -17394,19 +17337,12 @@ run(function()
 		Name = 'Require Mouse Down',
 		Tooltip = 'Only breaks blocks when holding left click'
 	})
-	
-    if TargetList and TargetList.Object then
-        TargetList.Object.Visible = TargetBlocks.Enabled
-    end
 
-    task.defer(function()
-        if TargetList and TargetList.Object then
-            TargetList.Object.Visible = false   
-        end
-        if CustomHealth and CustomHealth.Object then
-            CustomHealth.Object.Visible = Effect.Enabled  
-        end
-    end)
+	task.defer(function()
+		if CustomHealth and CustomHealth.Object then
+			CustomHealth.Object.Visible = Effect.Enabled
+		end
+	end)
 end)
 	
 run(function()
