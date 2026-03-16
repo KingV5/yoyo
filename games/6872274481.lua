@@ -8387,15 +8387,15 @@ run(function()
 								}
 							end
 
-						elseif PAMode.Value == 'AeroPA' then
+						elseif PAMode.Value == 'KingifyPA' then
 							local distance = (targetBodyPart.Position - offsetpos).Magnitude
 							local rawLook = CFrame.new(offsetpos, targetBodyPart.Position)
 							local tempPart = {
 								Position = targetBodyPart.Position,
 								Velocity = targetVelocity
 							}
-							local predictedPosition = aerov4bad.predictStrafingMovement(plr.Player, tempPart, projSpeed, gravity, offsetpos)
-							local newlook = aerov4bad.smoothAim(rawLook, predictedPosition, distance)
+							local predictedPosition = Kingifyv4bad.predictStrafingMovement(plr.Player, tempPart, projSpeed, gravity, offsetpos)
+							local newlook = Kingifyv4bad.smoothAim(rawLook, predictedPosition, distance)
 							if projmeta.projectile ~= 'owl_projectile' then
 								newlook = newlook * CFrame.new(bedwars.BowConstantsTable.RelX or 0, bedwars.BowConstantsTable.RelY or 0, bedwars.BowConstantsTable.RelZ or 0)
 							end
@@ -8406,9 +8406,9 @@ run(function()
 							)
 							if calc then
 								if targetinfo and targetinfo.Targets then targetinfo.Targets[plr] = tick() + 1 end
-								local customDrawDuration = 0.58 * (AeroPAChargePercent.Value / 100)
+								local customDrawDuration = 0.58 * (KingifyPAChargePercent.Value / 100)
 								if usingFrostStaff then
-									customDrawDuration = getFrostStaffCooldown(store.hand.tool.Name) * (AeroPAChargePercent.Value / 100)
+									customDrawDuration = getFrostStaffCooldown(store.hand.tool.Name) * (KingifyPAChargePercent.Value / 100)
 								end
 								local finalDirection = (calc - newlook.p).Unit
 								local angleFromHorizontal = math.acos(math.clamp(finalDirection:Dot(Vector3.new(0, 1, 0)), -1, 1))
@@ -8455,7 +8455,7 @@ run(function()
 					return old(...)
 				end
 			else
-				bedwars.ProjectileController.calculateImportantLaunchValues = getgenv()._aerov4_original_calcLaunch or old
+				bedwars.ProjectileController.calculateImportantLaunchValues = getgenv()._Kingifyv4_original_calcLaunch or old
 				if targetOutline then
 					pcall(function() targetOutline:Destroy() end)
 					targetOutline = nil
@@ -8479,7 +8479,7 @@ run(function()
 
 	PAMode = ProjectileAimbot:CreateDropdown({
 		Name = 'PA Mode',
-		List = {'Vape', 'AeroPA', 'DesirePA', 'SavyPA'},
+		List = {'Vape', 'KingifyPA', 'KingifyPA', 'KingifyPA'},
 		Default = 'Vape',
 		Tooltip = 'Select prediction algorithm',
 		Function = function() updateOptionsVisibility() end
@@ -8630,7 +8630,7 @@ run(function()
         Tooltip = 'prioritize targets'
     })
 
-	AeroPAChargePercent = ProjectileAimbot:CreateSlider({
+	KingifyPAChargePercent = ProjectileAimbot:CreateSlider({
 		Name = 'Charge Percent',
 		Min = 1,
 		Max = 100,
@@ -9207,10 +9207,10 @@ run(function()
         Name = 'AutoChargeBow',
         Function = function(callback)
             if callback then
-				if not getgenv()._aerov4_original_calcLaunch then
-					getgenv()._aerov4_original_calcLaunch = bedwars.ProjectileController.calculateImportantLaunchValues
+				if not getgenv()._Kingifyv4_original_calcLaunch then
+					getgenv()._Kingifyv4_original_calcLaunch = bedwars.ProjectileController.calculateImportantLaunchValues
 				end
-				old = getgenv()._aerov4_original_calcLaunch
+				old = getgenv()._Kingifyv4_original_calcLaunch
                 bedwars.ProjectileController.calculateImportantLaunchValues = function(...)
                     local result = old(...)
                     
@@ -9222,7 +9222,7 @@ run(function()
                 end
             else
 				if old then
-					bedwars.ProjectileController.calculateImportantLaunchValues = getgenv()._aerov4_original_calcLaunch or old
+					bedwars.ProjectileController.calculateImportantLaunchValues = getgenv()._Kingifyv4_original_calcLaunch or old
 					old = nil
 				end
             end
@@ -9258,7 +9258,7 @@ run(function()
         return false
     end
     
-    local Aerov4TitanRemover = vape.Categories.BoostFPS:CreateModule({
+    local Kingifyv4TitanRemover = vape.Categories.BoostFPS:CreateModule({
         Name = 'Titan Remover',
         Function = function(callback)
             if callback then
@@ -9454,12 +9454,12 @@ run(function()
         Tooltip = 'Removes Titan/Bhaa models and effects for FPS boost'
     })
 
-    EffectsOnly = Aerov4TitanRemover:CreateToggle({
+    EffectsOnly = Kingifyv4TitanRemover:CreateToggle({
         Name = 'Effects Only',
         Default = false,
         Tooltip = 'Only hides particles keeps titan models visible',
         Function = function(callback)
-            if Aerov4TitanRemover.Enabled then
+            if Kingifyv4TitanRemover.Enabled then
                 for object, properties in pairs(originalProperties) do
                     if object and object.Parent then
                         pcall(function()
@@ -9474,9 +9474,9 @@ run(function()
                 processedObjects = {}
                 originalProperties = {}
                 
-                Aerov4TitanRemover:Toggle()
+                Kingifyv4TitanRemover:Toggle()
                 task.wait()
-                Aerov4TitanRemover:Toggle()
+                Kingifyv4TitanRemover:Toggle()
             end
         end
     })
@@ -18924,7 +18924,7 @@ run(function()
 	local detectedPlayers = {}
 	local processing = {}
 
-	getgenv()._aerov4_staffCounts = {spec=0, closet=0, mod=0, impossible=0}
+	getgenv()._Kingifyv4_staffCounts = {spec=0, closet=0, mod=0, impossible=0}
 	local function refreshStaffCounts()
 		local c = {spec=0, closet=0, mod=0, impossible=0}
 		for _, data in pairs(detectedPlayers) do
@@ -18939,7 +18939,7 @@ run(function()
 				c.mod += 1
 			end
 		end
-		getgenv()._aerov4_staffCounts = c
+		getgenv()._Kingifyv4_staffCounts = c
 		vapeEvents.StaffCountUpdate:Fire()
 	end
 
@@ -23168,10 +23168,10 @@ run(function()
 		Name = 'AutoUma',
 		Function = function(callback)
 			if callback then
-				if not getgenv()._aerov4_original_calcLaunch then
-					getgenv()._aerov4_original_calcLaunch = bedwars.ProjectileController.calculateImportantLaunchValues
+				if not getgenv()._Kingifyv4_original_calcLaunch then
+					getgenv()._Kingifyv4_original_calcLaunch = bedwars.ProjectileController.calculateImportantLaunchValues
 				end
-				old = getgenv()._aerov4_original_calcLaunch
+				old = getgenv()._Kingifyv4_original_calcLaunch
 				bedwars.ProjectileController.calculateImportantLaunchValues = function(...)
 					hovering = true
 					local self, projmeta, worldmeta, origin, shootpos = ...
@@ -23276,7 +23276,7 @@ run(function()
 				end
 			else
 				if old then
-					bedwars.ProjectileController.calculateImportantLaunchValues = getgenv()._aerov4_original_calcLaunch or old
+					bedwars.ProjectileController.calculateImportantLaunchValues = getgenv()._Kingifyv4_original_calcLaunch or old
 					old = nil
 				end
 				clearOutline()
