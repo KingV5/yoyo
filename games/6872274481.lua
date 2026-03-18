@@ -1784,279 +1784,183 @@ run(function()
 	local Targets
 	local Sort
 	local AimSpeed
-	local Smoothness
-	local ReactionTime
 	local Distance
 	local AngleSlider
-	local StrafeMultiplier
+	local StrafeIncrease
 	local KillauraTarget
 	local ClickAim
-	local ShopCheck
-	local FirstPersonCheck
-	local VerticalAim
-	local VerticalOffset
 	local AimPart
-	local WorkWithAllItems
+	local ViewMode
 	local PriorityMode
-	local ThirdPersonAim
 	local ShakeToggle
 	local ShakeAmount
+	local ShopCheck
 	local WorkWithProjectiles
-	local rayCheck = cloneRaycast()
+
 	local lockedTarget = nil
 	local rng = Random.new()
-	local lastAimCFrame = nil
-	local aimingAtTarget = false
-	local reactionStartTime = 0
-	local hasReacted = false
-	local currentTarget = nil
-	local cachedEnt = nil
-	local frameCount = 0
-	local TARGET_REFRESH_RATE = 6 
-	local lastClosestPart = nil
-    local lastClosestAngle = math.huge
 
-	local function getAimSpeed(sliderValue)
-		local baseSpeed = 0.008
-		local multiplier = 1.35
-		local speed = baseSpeed * (multiplier ^ sliderValue)
-		local smoothScale = 1 - ((Smoothness.Value - 1) / 9) * 0.85
-		return math.min(speed, 0.95) * smoothScale
+	local function isFirstPerson()
+		local head = lplr.Character and lplr.Character:FindFirstChild("Head")
+		if head then
+			return (head.Position - workspace.CurrentCamera.CFrame.Position).Magnitude < 2
+		end
+		return false
 	end
 
-	local function queryTarget()
-		return KillauraTarget.Enabled and store.KillauraTarget or entitylib.EntityPosition({
-			Range = Distance.Value,
-			Part = 'RootPart',
-			Wallcheck = Targets.Walls.Enabled,
-			Players = Targets.Players.Enabled,
-			NPCs = Targets.NPCs.Enabled,
-			Sort = sortmethods[Sort.Value]
-		})
+	local function getClosestPartToCursor(character)
+		local mousePos = inputService:GetMouseLocation()
+		local mouseRay = gameCamera:ViewportPointToRay(mousePos.X, mousePos.Y, 0)
+		local bestAngle = math.huge
+		local bestPart = nil
+		local partNames = {
+			'HumanoidRootPart', 'Head', 'UpperTorso', 'LowerTorso',
+			'LeftUpperArm', 'RightUpperArm', 'LeftLowerArm', 'RightLowerArm',
+			'LeftUpperLeg', 'RightUpperLeg', 'LeftLowerLeg', 'RightLowerLeg',
+			'LeftFoot', 'RightFoot', 'LeftHand', 'RightHand'
+		}
+		for _, partName in partNames do
+			local part = character:FindFirstChild(partName)
+			if part then
+				local dirToPart = (part.Position - mouseRay.Origin).Unit
+				local angle = math.acos(math.clamp(mouseRay.Direction:Dot(dirToPart), -1, 1))
+				if angle < bestAngle then
+					bestAngle = angle
+					bestPart = part
+				end
+			end
+		end
+		return bestPart
+	end
+
+	local function isProjectileWeapon()
+		if store.hand and store.hand.tool then
+			local toolName = store.hand.tool.Name:lower()
+			return toolName:find("bow") or toolName:find("crossbow") or toolName:find("headhunter")
+		end
+		return false
 	end
 
 	AimAssist = vape.Categories.Combat:CreateModule({
 		Name = 'AimAssist',
 		Function = function(callback)
 			if callback then
-				AimAssist:Clean(runService.RenderStepped:Connect(function(dt)
-					if store.ProjectileAimAssist and store.ProjectileAimAssist.Enabled then
-						if store.hand and store.hand.tool then
-							local toolName = store.hand.tool.Name:lower()
-							if toolName:find("bow") or toolName:find("crossbow") or toolName:find("headhunter") then
-								lockedTarget = nil
-								currentTarget = nil
-								cachedEnt = nil
-								hasReacted = false
-								return
-							end
-						end
+				AimAssist:Clean(runService.Heartbeat:Connect(function(dt)
+					local validWeapon = store.hand.toolType == 'sword'
+					if WorkWithProjectiles.Enabled then
+						validWeapon = validWeapon or isProjectileWeapon()
 					end
-
-					local validWeaponCheck = false
-					if WorkWithAllItems.Enabled then
-						validWeaponCheck = true
-					elseif WorkWithProjectiles.Enabled then
-						validWeaponCheck = hasValidWeapon()
-					else
-						validWeaponCheck = isSword()
-					end
-
-					if not (entitylib.isAlive and validWeaponCheck and ((not ClickAim.Enabled) or (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) < 0.4)) then
+					if not validWeapon then
 						lockedTarget = nil
-						currentTarget = nil
-						cachedEnt = nil
-						hasReacted = false
 						return
 					end
 
-					if ShopCheck.Enabled then
-						if lplr.PlayerGui and lplr.PlayerGui:FindFirstChild("ItemShop") then return end
+					if not entitylib.isAlive then
+						lockedTarget = nil
+						return
+					end
+
+					if ClickAim.Enabled and (tick() - bedwars.SwordController.lastSwing) >= 0.4 then
+						lockedTarget = nil
+						return
 					end
 
 					local currentView = isFirstPerson()
 					if ViewMode.Value == "First Person" and not currentView then return end
 					if ViewMode.Value == "Third Person" and currentView then return end
 
-					frameCount += 1
-					local ent = nil
+					if ShopCheck.Enabled and lplr.PlayerGui and lplr.PlayerGui:FindFirstChild("ItemShop") then
+						lockedTarget = nil
+						return
+					end
 
-					if PriorityMode.Enabled then
-						if lockedTarget and isTargetValid(lockedTarget, Distance.Value, Targets.Walls.Enabled) then
-							local delta = (lockedTarget.RootPart.Position - entitylib.character.RootPart.Position)
-							local localfacing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
-							local flatDelta = delta * Vector3.new(1, 0, 1)
-							if flatDelta.Magnitude > 0.001 then
-								local angle = math.acos(math.clamp(localfacing:Dot(flatDelta.Unit), -1, 1))
-								if angle < (math.rad(AngleSlider.Value) / 2) then
-									ent = lockedTarget
-								else
-									lockedTarget = nil
-									currentTarget = nil
-									cachedEnt = nil
-									hasReacted = false
-								end
+					local ent
+					if PriorityMode.Enabled and lockedTarget then
+						local delta = (lockedTarget.RootPart.Position - entitylib.character.RootPart.Position)
+						local localfacing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
+						local flatDelta = delta * Vector3.new(1, 0, 1)
+						if flatDelta.Magnitude > 0.001 then
+							local angle = math.acos(math.clamp(localfacing:Dot(flatDelta.Unit), -1, 1))
+							local dist = delta.Magnitude
+							if dist <= Distance.Value and angle < (math.rad(AngleSlider.Value) / 2) then
+								ent = lockedTarget
+							else
+								lockedTarget = nil
 							end
 						else
 							lockedTarget = nil
 						end
-
-						if not ent then
-							if frameCount % TARGET_REFRESH_RATE == 0 or cachedEnt == nil then
-								cachedEnt = queryTarget()
-							end
-							ent = cachedEnt
-							if ent then
-								lockedTarget = ent
-							end
-						end
-					else
-						lockedTarget = nil
-						if frameCount % TARGET_REFRESH_RATE == 0 or cachedEnt == nil then
-							cachedEnt = queryTarget()
-						end
-						ent = cachedEnt
 					end
 
-					if ent then
-						if not isTargetValid(ent, Distance.Value) then
-							cachedEnt = nil
-							ent = nil
-							currentTarget = nil
-							hasReacted = false
-							aimingAtTarget = false
-							lastAimCFrame = nil
-							if PriorityMode.Enabled then lockedTarget = nil end
-							return
+					if not ent then
+						ent = entitylib.EntityPosition({
+							Range = Distance.Value,
+							Part = 'RootPart',
+							Wallcheck = Targets.Walls.Enabled,
+							Players = Targets.Players.Enabled,
+							NPCs = Targets.NPCs.Enabled,
+							Sort = sortmethods[Sort.Value]
+						})
+						if PriorityMode.Enabled and ent then
+							lockedTarget = ent
 						end
+					end
 
-						if currentTarget ~= ent then
-							currentTarget = ent
-							hasReacted = false
-							reactionStartTime = tick()
-							lastClosestPart = nil
-							lastClosestAngle = math.huge
+					if KillauraTarget.Enabled and store.KillauraTarget then
+						ent = store.KillauraTarget
+						if PriorityMode.Enabled then
+							lockedTarget = ent
 						end
+					end
 
-						if not hasReacted then
-							local reactionDelay = ReactionTime.Value / 1000
-							local randomVariance = (rng:NextNumber() - 0.5) * 0.3 * reactionDelay
-							local actualDelay = reactionDelay + randomVariance
-							if (tick() - reactionStartTime) < actualDelay then
-								return
-							else
-								hasReacted = true
-							end
-						end
-
-						pcall(function()
-							vapeTargetInfo.Targets.AimAssist = {
-								Humanoid = {
-									Health = (ent.Character:GetAttribute("Health") or ent.Humanoid.Health) + getShieldAttribute(ent.Character),
-									MaxHealth = ent.Character:GetAttribute("MaxHealth") or ent.Humanoid.MaxHealth
-								},
-								Player = ent.Player
-							}
-						end)
-
+					if ent and ent.RootPart then
 						local delta = (ent.RootPart.Position - entitylib.character.RootPart.Position)
 						local localfacing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
 						local flatDelta = delta * Vector3.new(1, 0, 1)
-						if flatDelta.Magnitude < 0.001 then return end
-						local angle = math.acos(math.clamp(localfacing:Dot(flatDelta.Unit), -1, 1))
-						if angle >= (math.rad(AngleSlider.Value) / 2) then return end
+						if flatDelta.Magnitude > 0.001 then
+							local angle = math.acos(math.clamp(localfacing:Dot(flatDelta.Unit), -1, 1))
+							if angle >= (math.rad(AngleSlider.Value) / 2) then
+								if PriorityMode.Enabled then lockedTarget = nil end
+								return
+							end
+						else
+							return
+						end
 
 						targetinfo.Targets[ent] = tick() + 1
 
 						local aimPosition = ent.RootPart.Position
-
-						if AimPart.Value == 'Closest' then
-							local mousePos = inputService:GetMouseLocation()
-							local mouseRay = gameCamera:ViewportPointToRay(mousePos.X, mousePos.Y, 0)
-							local bestAngle = math.huge
-							local bestPart = nil
-							local partNames = {
-								'HumanoidRootPart', 'Head', 'UpperTorso', 'LowerTorso',
-								'LeftUpperArm', 'RightUpperArm', 'LeftLowerArm', 'RightLowerArm',
-								'LeftUpperLeg', 'RightUpperLeg', 'LeftLowerLeg', 'RightLowerLeg',
-								'LeftFoot', 'RightFoot', 'LeftHand', 'RightHand'
-							}
-							for _, partName in partNames do
-								local part = ent.Character:FindFirstChild(partName)
-								if part then
-									local dirToPart = (part.Position - mouseRay.Origin).Unit
-									local angle = math.acos(math.clamp(mouseRay.Direction:Dot(dirToPart), -1, 1))
-									if angle < bestAngle then
-										bestAngle = angle
-										bestPart = part
-									end
+						if AimPart.Value == "Head" then
+							local head = ent.Character and ent.Character:FindFirstChild("Head")
+							if head then
+								aimPosition = head.Position
+							end
+						elseif AimPart.Value == "Closest" then
+							if ent.Character then
+								local closestPart = getClosestPartToCursor(ent.Character)
+								if closestPart then
+									aimPosition = closestPart.Position
 								end
 							end
-							if bestPart then
-								aimPosition = bestPart.Position
-							end
-						else
-							local targetPart = ent.Character:FindFirstChild(AimPart.Value == 'Head' and 'Head' or 'Torso')
-							if not targetPart then
-								targetPart = ent.Character:FindFirstChild('UpperTorso')
-							end
-							if targetPart then
-								aimPosition = targetPart.Position
-							end
-						end
-
-						if VerticalAim.Enabled then
-							aimPosition = aimPosition + Vector3.new(0, VerticalOffset.Value, 0)
-						end
-
-						local finalAimSpeed = getAimSpeed(AimSpeed.Value)
-
-						if StrafeMultiplier.Enabled and (inputService:IsKeyDown(Enum.KeyCode.A) or inputService:IsKeyDown(Enum.KeyCode.D)) then
-							finalAimSpeed = finalAimSpeed * 1.15
 						end
 
 						if ShakeToggle.Enabled and ShakeAmount.Value > 0 then
 							local shakeIntensity = ShakeAmount.Value / 10
-							local speedVariation = 1 + ((rng:NextNumber() - 0.5) * shakeIntensity * 0.3)
-							finalAimSpeed = finalAimSpeed * speedVariation
-							local jitterAmount = ShakeAmount.Value * 0.1
 							aimPosition = aimPosition + Vector3.new(
-								(rng:NextNumber() - 0.5) * jitterAmount,
-								(rng:NextNumber() - 0.5) * jitterAmount,
-								(rng:NextNumber() - 0.5) * jitterAmount
+								(rng:NextNumber() - 0.5) * shakeIntensity,
+								(rng:NextNumber() - 0.5) * shakeIntensity,
+								(rng:NextNumber() - 0.5) * shakeIntensity
 							)
 						end
 
-						if ThirdPersonAim.Enabled then
-							entitylib.character.RootPart.CFrame = entitylib.character.RootPart.CFrame:Lerp(
-								CFrame.lookAt(entitylib.character.RootPart.CFrame.p,
-								Vector3.new(aimPosition.X, entitylib.character.RootPart.Position.Y, aimPosition.Z)),
-								finalAimSpeed * 100 * dt
-							)
-						else
-							local targetCFrame = CFrame.lookAt(gameCamera.CFrame.p, aimPosition)
-							gameCamera.CFrame = gameCamera.CFrame:Lerp(targetCFrame, finalAimSpeed)
-							lastAimCFrame = targetCFrame
-							aimingAtTarget = true
+						local aimSpeed = AimSpeed.Value
+						if StrafeIncrease.Enabled and (inputService:IsKeyDown(Enum.KeyCode.A) or inputService:IsKeyDown(Enum.KeyCode.D)) then
+							aimSpeed = aimSpeed + 10
 						end
+
+						local targetCFrame = CFrame.lookAt(gameCamera.CFrame.p, aimPosition)
+						gameCamera.CFrame = gameCamera.CFrame:Lerp(targetCFrame, aimSpeed * dt)
 					else
-						currentTarget = nil
-						hasReacted = false
-						cachedEnt = nil
-
-						if aimingAtTarget and lastAimCFrame then
-							local retractSpeed = 0.05
-							if (gameCamera.CFrame.Position - lastAimCFrame.Position).Magnitude > 0.1 then
-								gameCamera.CFrame = gameCamera.CFrame:Lerp(
-									CFrame.new(gameCamera.CFrame.Position, gameCamera.CFrame.Position + gameCamera.CFrame.LookVector),
-									retractSpeed
-								)
-							else
-								aimingAtTarget = false
-								lastAimCFrame = nil
-							end
-						end
-
 						if PriorityMode.Enabled then
 							lockedTarget = nil
 						end
@@ -2064,77 +1968,54 @@ run(function()
 				end))
 			else
 				lockedTarget = nil
-				aimingAtTarget = false
-				lastAimCFrame = nil
-				currentTarget = nil
-				cachedEnt = nil
-				hasReacted = false
-				frameCount = 0
 			end
 		end,
-		Tooltip = 'Aim assist with reaction time and smoothness'
+		Tooltip = 'Smoothly aims to closest valid target with sword'
 	})
 
 	Targets = AimAssist:CreateTargets({
 		Players = true,
 		Walls = true
 	})
-
 	local methods = {'Damage', 'Distance'}
 	for i in sortmethods do
 		if not table.find(methods, i) then
 			table.insert(methods, i)
 		end
 	end
-
 	Sort = AimAssist:CreateDropdown({
 		Name = 'Target Mode',
-		List = methods,
-		Tooltip = 'How to prioritize targets'
+		List = methods
 	})
-
 	AimSpeed = AimAssist:CreateSlider({
 		Name = 'Aim Speed',
 		Min = 1,
 		Max = 20,
-		Default = 6,
-		Tooltip = 'How fast the aim assistant tracks targets'
+		Default = 6
 	})
-
-	Smoothness = AimAssist:CreateSlider({
-		Name = 'Smoothness',
-		Min = 1,
-		Max = 10,
-		Default = 1,
-		Tooltip = 'Higher = smoother and more legit looking, lower = snappier'
-	})
-
-	ReactionTime = AimAssist:CreateSlider({
-		Name = 'Reaction Time',
-		Min = 0,
-		Max = 300,
-		Default = 80,
-		Suffix = 'ms',
-		Tooltip = 'Delay before aim assist activates'
-	})
-
 	Distance = AimAssist:CreateSlider({
 		Name = 'Distance',
 		Min = 1,
 		Max = 30,
-		Default = 25,
-		Suffix = function(val)
+		Default = 30,
+		Suffx = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
 	})
-
 	AngleSlider = AimAssist:CreateSlider({
-		Name = 'Max Angle',
+		Name = 'Max angle',
 		Min = 1,
 		Max = 360,
-		Default = 60,
-		Tooltip = 'FOV angle for target acquisition'
+		Default = 70
 	})
+	ClickAim = AimAssist:CreateToggle({
+		Name = 'Click Aim',
+		Default = true
+	})
+	KillauraTarget = AimAssist:CreateToggle({
+		Name = 'Use killaura target'
+	})
+	StrafeIncrease = AimAssist:CreateToggle({Name = 'Strafe increase'})
 
 	AimPart = AimAssist:CreateDropdown({
 		Name = 'Aim Part',
@@ -2153,34 +2034,6 @@ run(function()
 		Name = 'Priority Mode',
 		Default = false,
 		Tooltip = 'Lock onto one target until they leave range'
-	})
-
-	ClickAim = AimAssist:CreateToggle({
-		Name = 'Click Aim',
-		Default = true,
-		Tooltip = 'Only aim when attacking'
-	})
-
-	KillauraTarget = AimAssist:CreateToggle({
-		Name = 'Use Killaura Target',
-		Tooltip = 'Use the same target as Killaura'
-	})
-
-	VerticalAim = AimAssist:CreateToggle({
-		Name = 'Vertical Offset',
-		Default = false,
-		Function = function(callback)
-			VerticalOffset.Object.Visible = callback
-		end
-	})
-
-	VerticalOffset = AimAssist:CreateSlider({
-		Name = 'Offset',
-		Min = -3,
-		Max = 3,
-		Default = 0,
-		Decimal = 10,
-		Visible = false
 	})
 
 	ShakeToggle = AimAssist:CreateToggle({
@@ -2206,35 +2059,15 @@ run(function()
 		Tooltip = 'Disable when shop is open'
 	})
 
-	ThirdPersonAim = AimAssist:CreateToggle({
-		Name = 'Third Person Aim',
-		Default = false,
-		Tooltip = 'Rotate character instead of camera'
-	})
-
-	StrafeMultiplier = AimAssist:CreateToggle({
-		Name = 'Strafe Boost',
-		Tooltip = 'Increase aim speed when strafing'
-	})
-
 	WorkWithProjectiles = AimAssist:CreateToggle({
 		Name = 'Work With Projectiles',
 		Default = false,
-		Tooltip = 'Also work when holding bows/crossbows'
-	})
-
-	WorkWithAllItems = AimAssist:CreateToggle({
-		Name = 'Work With All Items',
-		Default = false,
-		Tooltip = 'Work with any item equipped'
+		Tooltip = 'Also work when holding bows/crossbows (sword still required otherwise)'
 	})
 
 	task.defer(function()
-		if VerticalOffset and VerticalOffset.Object then
-			VerticalOffset.Object.Visible = false   
-		end
 		if ShakeAmount and ShakeAmount.Object then
-			ShakeAmount.Object.Visible = false     
+			ShakeAmount.Object.Visible = false
 		end
 	end)
 end)
