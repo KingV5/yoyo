@@ -1,5 +1,4 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
---This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local run = function(func)
     local ok, err = pcall(func)
     if not ok then
@@ -1042,10 +1041,9 @@ run(function()
 		local obj = bedwars.BlockController:getStore():getBlockAt(breakTable.blockPosition)
 
 		if obj and obj.Name == 'bed' then
-			for _, plr in playersService:GetPlayers() do
-				if obj:GetAttribute('Team'..(plr:GetAttribute('Team') or 0)..'NoBreak') and not select(2, whitelist:get(plr)) then
-					return false
-				end
+			local myTeam = lplr:GetAttribute('Team')
+			if myTeam and obj:GetAttribute('Team' .. myTeam .. 'NoBreak') then
+				return false
 			end
 		end
 
@@ -1162,7 +1160,7 @@ run(function()
 				if tool then
 					if autotool then
 						for i, v in store.inventory.hotbar do
-							if v.item and v.item.tool == tool.tool and i ~= (store.inventory.hotbarSlot + 1) then 
+							if v.item and v.item.itemType == tool.itemType and i ~= (store.inventory.hotbarSlot + 1) then 
 								hotbarSwitch(i - 1)
 								break
 							end
@@ -1190,6 +1188,7 @@ run(function()
 							table.clear(cache)
 							return
 						end
+						table.clear(cache)
 
 						if effects then
 							local blockdmg = (blockhealthbar.blockHealth - (result == 'destroyed' and 0 or getBlockHealth(dblock, dpos)))
@@ -16846,7 +16845,7 @@ run(function()
 	local currentTargetBlock = nil
 	local cachedTargetBlocks = {}
 	local lastCacheUpdate = 0
-	local CACHE_INTERVAL = 0.5
+	local CACHE_INTERVAL = 0.05
 
 	local tempSortTable = {}
 
@@ -16976,11 +16975,11 @@ run(function()
 
 	local function passesChecks(v)
 		local placedBy = v:GetAttribute('PlacedByUserId')
-		if not SelfBreak.Enabled then
-			if placedBy == lplr.UserId then return false end
-			if isSameTeam(placedBy) then return false end
-		else
-			if placedBy == lplr.UserId and (v.Name == 'bed' or v.Name == 'team_chest') then return false end
+		if not SelfBreak.Enabled and placedBy == lplr.UserId then return false end
+		if SelfBreak.Enabled and placedBy == lplr.UserId and (v.Name == 'bed' or v.Name == 'team_chest') then return false end
+		if v.Name == 'bed' or v.Name == 'team_chest' then
+			local myTeam = lplr:GetAttribute('Team')
+			if myTeam and v:GetAttribute('Team' .. myTeam .. 'NoBreak') then return false end
 		end
 		if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then return false end
 		if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then return false end
@@ -16998,6 +16997,10 @@ run(function()
 					part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
 				end
 				currentnode = path[currentnode]
+			end
+		else
+			for _, part in parts do
+				part.Position = Vector3.zero
 			end
 		end
 		task.wait(Delay.Value)
@@ -17071,10 +17074,76 @@ run(function()
 		return false
 	end
 
+	local function getCursorBlock(localPosition)
+		local cam = gameCamera
+		local origin = cam.CFrame.Position
+		local baseDir = cam.CFrame.LookVector
+		local paDir = nil
+		pcall(function()
+			local paCtrl = vape.Categories.Blatant and vape.Categories.Blatant:GetModule('ProjectileAimbot')
+			if paCtrl and paCtrl.Enabled then
+				local tgt = targetinfo and targetinfo.target
+				if tgt and tgt.Character and tgt.Character.PrimaryPart then
+					paDir = (tgt.Character.PrimaryPart.Position - origin).Unit
+				end
+			end
+		end)
+
+		local direction = paDir or baseDir
+		local range = Range.Value
+		local step = 3
+		local bestBlock, bestDist = nil, math.huge
+		for i = step, range, step do
+			local checkPos = roundPos(origin + direction * i)
+			local block = getPlacedBlock(checkPos)
+			if block then
+				if bedwars.BlockController:isBlockBreakable({blockPosition = checkPos / 3}, lplr) then
+					if passesChecks(block) then
+						local dist = (checkPos - localPosition).Magnitude
+						if dist < bestDist then
+							bestBlock, bestDist = block, dist
+							break 
+						end
+					end
+				end
+			end
+		end
+
+		if not bestBlock then
+			local forward = localPosition + baseDir * 3
+			table.clear(tempSortTable)
+			for _, obj in store.blocks do
+				if obj and obj:IsA('BasePart') then
+					local dist = (obj.Position - localPosition).Magnitude
+					if dist <= range then
+						table.insert(tempSortTable, {obj, dist})
+					end
+				end
+			end
+			table.sort(tempSortTable, function(a, b) return a[2] < b[2] end)
+			for _, entry in tempSortTable do
+				local v = entry[1]
+				if bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
+					if passesChecks(v) then
+						bestBlock = v
+						break
+					end
+				end
+			end
+		end
+
+		return bestBlock
+	end
+
 	local function attemptBreakBed(tab, localPosition)
 		if not tab then return false end
 		if MouseDown.Enabled and not inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return false end
-
+		if BreakClosestBlock.Enabled then
+			local block = getCursorBlock(localPosition)
+			if block and block.Name ~= 'bed' then
+				return doBreak(block)
+			end
+		end
 		local closestBed = nil
 		local closestDist = math.huge
 		for _, bedModel in ipairs(tab) do
@@ -17095,11 +17164,8 @@ run(function()
 			if PathToBed.Enabled then
 				return false
 			end
-			local block = getPlacedBlock(closestBed.Position)
-			if not block then return false end
-			if not bedwars.BlockController:isBlockBreakable({blockPosition = block.Position / 3}, lplr) then return false end
-			if not passesChecks(block) then return false end
-			return doBreak(block)
+			if not passesChecks(closestBed) then return false end
+			return doBreak(closestBed)
 		end
 	end
 
@@ -17107,28 +17173,6 @@ run(function()
 		if not tab then return false end
 		if MouseDown.Enabled and not inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
 			return false
-		end
-
-		if isBed then
-			local closestBedBlock, closestDist = nil, math.huge
-			for _, bedModel in ipairs(tab) do
-				local distSq = (bedModel.Position - localPosition).Magnitude
-				if distSq <= Range.Value ^ 2 then
-					local block = getPlacedBlock(bedModel.Position)
-					if block and bedwars.BlockController:isBlockBreakable({blockPosition = block.Position / 3}, lplr) then
-						if passesChecks(block) then
-							local dist = math.sqrt(distSq)
-							if dist < closestDist then
-								closestDist = dist
-								closestBedBlock = block
-							end
-						end
-					end
-				end
-			end
-			if closestBedBlock then
-				return doBreak(closestBedBlock)
-			end
 		end
 
 		table.clear(tempSortTable)
@@ -17155,25 +17199,7 @@ run(function()
 						continue
 					end
 				end
-
-				if isBed and (BreakClosestBlock.Enabled or PathToBed.Enabled) then
-					hit += 1
-					local hasPath, blockingPos = hasDirectPathToBed(v.Position, localPosition)
-					if hasPath then
-						if BreakClosestBlock.Enabled and not PathToBed.Enabled then
-							return doBreak(v)
-						elseif PathToBed.Enabled then
-							return false
-						end
-					else
-						local block = getPlacedBlock(blockingPos)
-						if block and bedwars.BlockController:isBlockBreakable({blockPosition = blockingPos / 3}, lplr) and passesChecks(block) then
-							return doBreak(block)
-						end
-					end
-				else
-					return doBreak(v)
-				end
+				return doBreak(v)
 			end
 		end
 
@@ -17248,7 +17274,7 @@ run(function()
 		Name = 'Break Delay',
 		Min = 0,
 		Max = 0.3,
-		Default = 0.25,
+		Default = 0.05,
 		Decimal = 100,
 		Suffix = 'seconds'
 	})
@@ -17316,7 +17342,7 @@ run(function()
 	})
 	BreakClosestBlock = Breaker:CreateToggle({
 		Name = 'Break Closest Block',
-		Tooltip = 'Breaks blocks blocking the path to the bed. When path is clear, breaks the bed itself.',
+		Tooltip = 'Mines blocks at your cursor (like PA lock-on). Aims along camera direction; if a PA target is locked it biases toward them. No path needed — just breaks whatever is in front of you.',
 		Default = false,
 		Function = function(callback)
 			if callback and PathToBed.Enabled then
